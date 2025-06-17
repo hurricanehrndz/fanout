@@ -19,6 +19,7 @@
 package fanout
 
 import (
+	"fmt"
 	"math/rand"
 	"os"
 	"path/filepath"
@@ -34,6 +35,7 @@ import (
 	"github.com/coredns/coredns/plugin/pkg/parse"
 	"github.com/coredns/coredns/plugin/pkg/tls"
 	"github.com/coredns/coredns/plugin/pkg/transport"
+	"github.com/miekg/dns"
 	"github.com/pkg/errors"
 )
 
@@ -45,29 +47,48 @@ func init() {
 }
 
 func setup(c *caddy.Controller) error {
-	f, err := parseFanout(c)
+	fs, err := parseFanout(c)
 	if err != nil {
 		return plugin.Error("fanout", err)
 	}
-	l := len(f.clients)
-	if len(f.clients) > maxIPCount {
-		return plugin.Error("fanout", errors.Errorf("more than %d TOs configured: %d", maxIPCount, l))
-	}
 
-	dnsserver.GetConfig(c).AddPlugin(func(next plugin.Handler) plugin.Handler {
-		f.Next = next
-		return f
-	})
-
-	c.OnStartup(func() error {
-		if taph := dnsserver.GetConfig(c).Handler("dnstap"); taph != nil {
-			if tapPlugin, ok := taph.(*dnstap.Dnstap); ok {
-				f.TapPlugin = tapPlugin
-			}
+	for i := range fs {
+		f := fs[i]
+		l := len(f.clients)
+		if l > maxIPCount {
+			return plugin.Error("fanout", errors.Errorf("more than %d TOs configured: %d", maxIPCount, l))
 		}
-		return f.OnStartup()
-	})
-	c.OnShutdown(f.OnShutdown)
+
+		if i == len(fs)-1 {
+			// last forward: point next to next plugin
+			dnsserver.GetConfig(c).AddPlugin(func(next plugin.Handler) plugin.Handler {
+				f.Next = next
+				return f
+			})
+		} else {
+			// middle fanout: point next to next fanout
+			nextFanout := fs[i+1]
+			dnsserver.GetConfig(c).AddPlugin(func(plugin.Handler) plugin.Handler {
+				f.Next = nextFanout
+				return f
+			})
+		}
+
+		c.OnStartup(func() error {
+			if taph := dnsserver.GetConfig(c).Handler("dnstap"); taph != nil {
+				if tapPlugin, ok := taph.(*dnstap.Dnstap); ok {
+					f.TapPlugin = tapPlugin
+				}
+			}
+			return f.OnStartup()
+		})
+
+
+		c.OnShutdown(func() error {
+			return f.OnShutdown()
+		})
+
+	}
 
 	return nil
 }
@@ -82,24 +103,18 @@ func (f *Fanout) OnShutdown() error {
 	return nil
 }
 
-func parseFanout(c *caddy.Controller) (*Fanout, error) {
-	var (
-		f   *Fanout
-		err error
-		i   int
-	)
+func parseFanout(c *caddy.Controller) ([]*Fanout, error) {
+	var fs []*Fanout
+
 	for c.Next() {
-		if i > 0 {
-			return nil, plugin.ErrOnce
-		}
-		i++
-		f, err = parsefanoutStanza(&c.Dispenser)
+		f, err := parsefanoutStanza(&c.Dispenser)
 		if err != nil {
 			return nil, err
 		}
+		fs = append(fs, f)
 	}
 
-	return f, nil
+	return fs, nil
 }
 
 func parsefanoutStanza(c *caddyfile.Dispenser) (*Fanout, error) {
@@ -214,9 +229,31 @@ func parseValue(v string, f *Fanout, c *caddyfile.Dispenser) error {
 		num, err := parsePositiveInt(c)
 		f.Attempts = num
 		return err
+	case "next":
+		return parseNext(f, c)
 	default:
 		return errors.Errorf("unknown property %v", v)
 	}
+}
+
+func parseNext(f *Fanout, c *caddyfile.Dispenser) error {
+	dnsReturnCodes := c.RemainingArgs()
+	if len(dnsReturnCodes) == 0 {
+		return c.ArgErr()
+	}
+
+	for _, rcode := range dnsReturnCodes {
+		var rc int
+		var ok bool
+
+		if rc, ok = dns.StringToRcode[strings.ToUpper(rcode)]; !ok {
+			return fmt.Errorf("%s is not a valid rcode", rcode)
+		}
+
+		f.nextAlternateRcodes = append(f.nextAlternateRcodes, rc)
+	}
+
+	return nil
 }
 
 func parsePolicy(f *Fanout, c *caddyfile.Dispenser) error {

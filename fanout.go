@@ -21,6 +21,7 @@ package fanout
 import (
 	"context"
 	"crypto/tls"
+	"slices"
 	"sync"
 	"time"
 
@@ -53,6 +54,7 @@ type Fanout struct {
 	policyType            string
 	ServerSelectionPolicy policy
 	TapPlugin             *dnstap.Dnstap
+	nextAlternateRcodes   []int
 	Next                  plugin.Handler
 }
 
@@ -86,21 +88,35 @@ func (f *Fanout) ServeDNS(ctx context.Context, w dns.ResponseWriter, m *dns.Msg)
 	if !f.match(&req) {
 		return plugin.NextOrFailure(f.Name(), f.Next, ctx, w, m)
 	}
+
 	timeoutContext, cancel := context.WithTimeout(ctx, f.Timeout)
 	defer cancel()
+
 	result := f.getFanoutResult(timeoutContext, f.runWorkers(timeoutContext, &req))
-	if result == nil {
-		return dns.RcodeServerFailure, timeoutContext.Err()
+	if result == nil || result.err != nil {
+		rcode := dns.RcodeServerFailure
+		// Check if we should delegate to the next plugin based on RcodeServerFailure
+		if f.shouldDelegateToNextFanout(rcode) {
+			return plugin.NextOrFailure(f.Name(), f.Next, ctx, w, m)
+		}
+
+		if result == nil {
+			return rcode, timeoutContext.Err()
+		}
+
+		if result.err != nil {
+			return rcode, result.err
+		}
 	}
+
 	metadata.SetValueFunc(ctx, "fanout/upstream", func() string {
 		return result.client.Endpoint()
 	})
-	if result.err != nil {
-		return dns.RcodeServerFailure, result.err
-	}
+
 	if f.TapPlugin != nil {
 		toDnstap(f.TapPlugin, result.client, &req, result.response, result.start)
 	}
+
 	if !req.Match(result.response) {
 		debug.Hexdumpf(result.response, "Wrong reply for id: %d, %s %d", result.response.Id, req.QName(), req.QType())
 		formerr := new(dns.Msg)
@@ -108,6 +124,12 @@ func (f *Fanout) ServeDNS(ctx context.Context, w dns.ResponseWriter, m *dns.Msg)
 		logErrIfNotNil(w.WriteMsg(formerr))
 		return 0, nil
 	}
+
+	// Check if we should delegate to the next plugin based on response code
+	if f.shouldDelegateToNextFanout(result.response.Rcode) {
+		return plugin.NextOrFailure(f.Name(), f.Next, ctx, w, m)
+	}
+
 	logErrIfNotNil(w.WriteMsg(result.response))
 	return 0, nil
 }
@@ -176,6 +198,17 @@ func (f *Fanout) getFanoutResult(ctx context.Context, responseCh <-chan *respons
 			return r
 		}
 	}
+}
+
+func (f *Fanout) shouldDelegateToNextFanout(rcode int) bool {
+	return slices.Contains(f.nextAlternateRcodes, rcode) &&
+	       f.Next != nil &&
+	       isNextPluginFanout(f.Next)
+}
+
+func isNextPluginFanout(next plugin.Handler) bool {
+	_, ok := next.(*Fanout)
+	return ok
 }
 
 func (f *Fanout) match(state *request.Request) bool {
