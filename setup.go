@@ -297,7 +297,8 @@ func parseIgnoredFromFile(f *Fanout, c *caddyfile.Dispenser) error {
 	if err != nil {
 		return err
 	}
-	names := strings.Split(string(b), "\n")
+	cleanNamesStr := strings.TrimSuffix(string(b), "\n")
+	names := strings.Split(cleanNamesStr, "\n")
 	log.Infof("building exception list: %#v", names)
 	for i, name := range names {
 		if name == "" {
