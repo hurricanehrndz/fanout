@@ -298,6 +298,7 @@ func parseIgnoredFromFile(f *Fanout, c *caddyfile.Dispenser) error {
 		return err
 	}
 	names := strings.Split(string(b), "\n")
+	log.Infof("building exception list: %#v", names)
 	for i := 0; i < len(names); i++ {
 		normalized := plugin.Host(names[i]).NormalizeExact()
 		if len(normalized) == 0 {
