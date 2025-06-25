@@ -134,6 +134,7 @@ func parsefanoutStanza(c *caddyfile.Dispenser) (*Fanout, error) {
 		return f, c.ArgErr()
 	}
 	toHosts, err := parse.HostPortOrFile(to...)
+	log.Infof("fanout: using following servers: %#v", toHosts)
 	if err != nil {
 		return f, err
 	}
