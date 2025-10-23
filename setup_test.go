@@ -71,7 +71,7 @@ func TestSetup(t *testing.T) {
 
 	for i, test := range tests {
 		c := caddy.NewTestController("dns", test.input)
-		f, err := parseFanout(c)
+		fs, err := parseFanout(c)
 		if test.expectedErr != "" && err == nil {
 			t.Fatalf("Test %d: expected error but not found errors", i)
 		}
@@ -82,6 +82,10 @@ func TestSetup(t *testing.T) {
 			}
 			continue
 		}
+		if len(fs) == 0 {
+			t.Fatalf("Test %d: expected at least one fanout instance", i)
+		}
+		f := fs[0]
 		if f.Timeout != test.expectedTimeout {
 			t.Fatalf("Test %d: expected: %d, got: %d", i, test.expectedTimeout, f.Timeout)
 		}
@@ -156,7 +160,7 @@ nameserver 10.10.255.253`), 0o600); err != nil {
 
 	for i, test := range tests {
 		c := caddy.NewTestController("dns", test.input)
-		f, err := parseFanout(c)
+		fs, err := parseFanout(c)
 
 		if test.shouldErr && err == nil {
 			t.Errorf("Test %d: expected error but found %s for input %s", i, err, test.input)
@@ -174,6 +178,11 @@ nameserver 10.10.255.253`), 0o600); err != nil {
 		}
 
 		if !test.shouldErr {
+			if len(fs) == 0 {
+				t.Errorf("Test %d: expected at least one fanout instance", i)
+				continue
+			}
+			f := fs[0]
 			for j, n := range test.expectedNames {
 				addr := f.clients[j].Endpoint()
 				if n != addr {
