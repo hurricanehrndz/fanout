@@ -37,17 +37,29 @@ type Client interface {
 }
 
 type client struct {
-	transport Transport
-	addr      string
-	net       string
+	transport     Transport
+	addr          string
+	net           string
+	udpBufferSize uint16
 }
 
 // NewClient creates new client with specific addr and network
 func NewClient(addr, net string) Client {
 	a := &client{
-		addr:      addr,
-		net:       net,
-		transport: NewTransport(addr),
+		addr:          addr,
+		net:           net,
+		transport:     NewTransport(addr),
+		udpBufferSize: minUDPBufferSize,
+	}
+	return a
+}
+
+func NewClientWithUDPBufferSize(addr, net string, udpBufferSize uint16) Client {
+	a := &client{
+		addr:          addr,
+		net:           net,
+		transport:     NewTransport(addr),
+		udpBufferSize: udpBufferSize,
 	}
 	return a
 }
@@ -82,7 +94,6 @@ func (c *client) Request(ctx context.Context, r *request.Request) (*dns.Msg, err
 	start := time.Now()
 	network := c.net
 
-
 	var conn *dns.Conn
 	var err error
 	defer func() {
@@ -97,7 +108,7 @@ func (c *client) Request(ctx context.Context, r *request.Request) (*dns.Msg, err
 			return nil, err
 		}
 
-		conn.UDPSize = max(uint16(r.Size()), 1232)
+		conn.UDPSize = max(uint16(r.Size()), c.udpBufferSize)
 
 		go func() {
 			<-ctx.Done()
