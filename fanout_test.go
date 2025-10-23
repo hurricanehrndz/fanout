@@ -124,8 +124,10 @@ func TestFanout_ExceptFile(t *testing.T) {
 	except-file %v
 }`, file.Name())
 	c := caddy.NewTestController("dns", source)
-	f, err := parseFanout(c)
+	fs, err := parseFanout(c)
 	require.Nil(t, err)
+	require.NotEmpty(t, fs)
+	f := fs[0]
 	for _, e := range exclude {
 		require.True(t, f.ExcludeDomains.Contains(e))
 	}
@@ -144,8 +146,10 @@ func (t *fanoutTestSuite) TestConfigFromCorefile() {
 	NETWORK %v
 }`
 	c := caddy.NewTestController("dns", fmt.Sprintf(source, s.addr, t.network))
-	f, err := parseFanout(c)
+	fs, err := parseFanout(c)
 	t.Nil(err)
+	t.NotEmpty(fs)
+	f := fs[0]
 	err = f.OnStartup()
 	t.Nil(err)
 	defer func() {

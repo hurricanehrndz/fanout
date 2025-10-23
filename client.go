@@ -80,50 +80,62 @@ func (c *client) Request(ctx context.Context, r *request.Request) (*dns.Msg, err
 		defer childSpan.Finish()
 	}
 	start := time.Now()
-	conn, err := c.transport.Dial(ctx, c.net)
-	if err != nil {
-		return nil, err
-	}
+	network := c.net
 
-	//Set buffer size correctly for this conn.
-	conn.UDPSize = uint16(r.Size())
-	if conn.UDPSize < 512 {
-		conn.UDPSize = 512
-	}
 
+	var conn *dns.Conn
+	var err error
 	defer func() {
 		_ = conn.Close()
 	}()
-	go func() {
-		<-ctx.Done()
-		_ = conn.Close()
-	}()
-	if err = conn.SetWriteDeadline(time.Now().Add(maxTimeout)); err != nil {
-		return nil, err
-	}
-	if err = conn.WriteMsg(r.Req); err != nil {
-		return nil, err
-	}
-	if err = conn.SetReadDeadline(time.Now().Add(readTimeout)); err != nil {
-		return nil, err
-	}
-	var ret *dns.Msg
-
 	for {
-		ret, err = conn.ReadMsg()
+		if conn != nil {
+			_ = conn.Close()
+		}
+		conn, err = c.transport.Dial(ctx, network)
 		if err != nil {
 			return nil, err
 		}
-		if r.Req.Id == ret.Id {
-			break
+
+		conn.UDPSize = max(uint16(r.Size()), 1232)
+
+		go func() {
+			<-ctx.Done()
+			_ = conn.Close()
+		}()
+		if err = conn.SetWriteDeadline(time.Now().Add(maxTimeout)); err != nil {
+			return nil, err
 		}
+		if err = conn.WriteMsg(r.Req); err != nil {
+			return nil, err
+		}
+		if err = conn.SetReadDeadline(time.Now().Add(readTimeout)); err != nil {
+			return nil, err
+		}
+		var ret *dns.Msg
+
+		for {
+			ret, err = conn.ReadMsg()
+			if err != nil {
+				return nil, err
+			}
+			if r.Req.Id == ret.Id {
+				break
+			}
+		}
+
+		if ret.Truncated && network == UDP {
+			network = TCP
+			continue
+		}
+
+		rc, ok := dns.RcodeToString[ret.Rcode]
+		if !ok {
+			rc = fmt.Sprint(ret.Rcode)
+		}
+		RequestCount.WithLabelValues(c.addr).Add(1)
+		RcodeCount.WithLabelValues(rc, c.addr).Add(1)
+		RequestDuration.WithLabelValues(c.addr).Observe(time.Since(start).Seconds())
+		return ret, nil
 	}
-	rc, ok := dns.RcodeToString[ret.Rcode]
-	if !ok {
-		rc = fmt.Sprint(ret.Rcode)
-	}
-	RequestCount.WithLabelValues(c.addr).Add(1)
-	RcodeCount.WithLabelValues(rc, c.addr).Add(1)
-	RequestDuration.WithLabelValues(c.addr).Observe(time.Since(start).Seconds())
-	return ret, nil
 }
