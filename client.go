@@ -88,10 +88,7 @@ func (c *client) Request(ctx context.Context, r *request.Request) (*dns.Msg, err
 			return nil, err
 		}
 
-		conn.UDPSize = uint16(r.Size())
-		if conn.UDPSize < 1232 {
-			conn.UDPSize = 1232
-		}
+		conn.UDPSize = max(uint16(r.Size()), 1232)
 
 		closeFn := func() {
 			_ = conn.Close()
