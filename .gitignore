@@ -17,3 +17,7 @@
 
 .idea/
 junit/
+
+# Nix
+.direnv/
+result
