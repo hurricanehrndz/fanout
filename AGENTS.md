@@ -18,6 +18,7 @@
 - **Cyclomatic complexity**: Keep functions under 15 complexity
 - **Dependencies**: No dependencies on `github.com/networkservicemesh/*` except `github.com/networkservicemesh/api`
 - **go.mod**: No `replace` directives allowed; run `go mod tidy` after dependency changes
+- Align the happy path to the left edge
 
 ## Critical Rules
 - Run `go mod tidy` after changing dependencies
