@@ -82,18 +82,23 @@ func (c *client) Request(ctx context.Context, r *request.Request) (*dns.Msg, err
 	start := time.Now()
 	network := c.net
 
+
+	var conn *dns.Conn
+	var err error
+	defer func() {
+		_ = conn.Close()
+	}()
 	for {
-		conn, err := c.transport.Dial(ctx, network)
+		if conn != nil {
+			_ = conn.Close()
+		}
+		conn, err = c.transport.Dial(ctx, network)
 		if err != nil {
 			return nil, err
 		}
 
 		conn.UDPSize = max(uint16(r.Size()), 1232)
 
-		closeFn := func() {
-			_ = conn.Close()
-		}
-		defer closeFn()
 		go func() {
 			<-ctx.Done()
 			_ = conn.Close()
@@ -120,7 +125,6 @@ func (c *client) Request(ctx context.Context, r *request.Request) (*dns.Msg, err
 		}
 
 		if ret.Truncated && network == UDP {
-			_ = conn.Close()
 			network = TCP
 			continue
 		}

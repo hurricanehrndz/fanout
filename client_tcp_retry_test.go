@@ -2,6 +2,8 @@ package fanout
 
 import (
 	"context"
+	"net"
+	"sync/atomic"
 	"testing"
 
 	"github.com/coredns/coredns/plugin/test"
@@ -11,21 +13,22 @@ import (
 )
 
 func TestTCPRetryOnTruncatedUDP(t *testing.T) {
-	udpCallCount := 0
-	tcpCallCount := 0
+	var udpCallCount, tcpCallCount atomic.Int32
 
-	s := newServer(UDP, func(w dns.ResponseWriter, r *dns.Msg) {
+	handler := func(w dns.ResponseWriter, r *dns.Msg) {
 		msg := dns.Msg{}
 		msg.SetReply(r)
 
-		if w.RemoteAddr().Network() == UDP {
-			udpCallCount++
+		network := w.RemoteAddr().Network()
+
+		if network == UDP {
+			udpCallCount.Add(1)
 			msg.Truncated = true
 			msg.Answer = []dns.RR{
 				makeRecordA("example.com. 3600 IN A 10.0.0.1"),
 			}
 		} else {
-			tcpCallCount++
+			tcpCallCount.Add(1)
 			msg.Truncated = false
 			msg.Answer = []dns.RR{
 				makeRecordA("example.com. 3600 IN A 10.0.0.1"),
@@ -33,10 +36,25 @@ func TestTCPRetryOnTruncatedUDP(t *testing.T) {
 			}
 		}
 		logErrIfNotNil(w.WriteMsg(&msg))
-	})
-	defer s.close()
+	}
 
-	c := NewClient(s.addr, UDP)
+	tcpListener, err := net.Listen(TCP, "127.0.0.1:0")
+	require.NoError(t, err)
+	defer tcpListener.Close()
+
+	udpConn, err := net.ListenPacket("udp", tcpListener.Addr().String())
+	require.NoError(t, err)
+	defer udpConn.Close()
+
+	tcpServer := &dns.Server{Listener: tcpListener, Handler: dns.HandlerFunc(handler)}
+	udpServer := &dns.Server{PacketConn: udpConn, Handler: dns.HandlerFunc(handler)}
+
+	go func() { _ = tcpServer.ActivateAndServe() }()
+	go func() { _ = udpServer.ActivateAndServe() }()
+	defer tcpServer.Shutdown()
+	defer udpServer.Shutdown()
+
+	c := NewClient(tcpListener.Addr().String(), UDP)
 	req := new(dns.Msg)
 	req.SetQuestion("example.com.", dns.TypeA)
 
@@ -45,10 +63,10 @@ func TestTCPRetryOnTruncatedUDP(t *testing.T) {
 
 	resp, err := c.Request(ctx, &request.Request{W: &test.ResponseWriter{}, Req: req})
 
-	require.Nil(t, err)
+	require.NoError(t, err)
 	require.NotNil(t, resp)
-	require.False(t, resp.Truncated)
-	require.Equal(t, 1, udpCallCount)
-	require.Equal(t, 1, tcpCallCount)
-	require.Len(t, resp.Answer, 2)
+	require.False(t, resp.Truncated, "TCP response should not be truncated")
+	require.Equal(t, int32(1), udpCallCount.Load(), "Expected exactly 1 UDP call")
+	require.Equal(t, int32(1), tcpCallCount.Load(), "Expected exactly 1 TCP call")
+	require.Len(t, resp.Answer, 2, "TCP response should have 2 answers")
 }
