@@ -97,7 +97,9 @@ func (c *client) Request(ctx context.Context, r *request.Request) (*dns.Msg, err
 	var conn *dns.Conn
 	var err error
 	defer func() {
-		_ = conn.Close()
+		if conn != nil {
+			_ = conn.Close()
+		}
 	}()
 	for {
 		if conn != nil {
