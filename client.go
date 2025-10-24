@@ -96,11 +96,6 @@ func (c *client) Request(ctx context.Context, r *request.Request) (*dns.Msg, err
 
 	var conn *dns.Conn
 	var err error
-	defer func() {
-		if conn != nil {
-			_ = conn.Close()
-		}
-	}()
 	for {
 		if conn != nil {
 			_ = conn.Close()
@@ -109,6 +104,11 @@ func (c *client) Request(ctx context.Context, r *request.Request) (*dns.Msg, err
 		if err != nil {
 			return nil, err
 		}
+		defer func() {
+			if conn != nil {
+				_ = conn.Close()
+			}
+		}()
 
 		conn.UDPSize = max(uint16(r.Size()), c.udpBufferSize)
 
