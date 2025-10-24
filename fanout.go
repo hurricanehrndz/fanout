@@ -50,6 +50,7 @@ type Fanout struct {
 	Attempts              int
 	WorkerCount           int
 	serverCount           int
+	udpBufferSize         uint16
 	loadFactor            []int
 	policyType            string
 	ServerSelectionPolicy policy
@@ -67,6 +68,7 @@ func New() *Fanout {
 		Timeout:               defaultTimeout,
 		ExcludeDomains:        NewDomain(),
 		ServerSelectionPolicy: &SequentialPolicy{}, // default policy
+		udpBufferSize:         minUDPBufferSize,
 	}
 }
 
@@ -202,8 +204,8 @@ func (f *Fanout) getFanoutResult(ctx context.Context, responseCh <-chan *respons
 
 func (f *Fanout) shouldDelegateToNextFanout(rcode int) bool {
 	return slices.Contains(f.nextAlternateRcodes, rcode) &&
-	       f.Next != nil &&
-	       isNextPluginFanout(f.Next)
+		f.Next != nil &&
+		isNextPluginFanout(f.Next)
 }
 
 func isNextPluginFanout(next plugin.Handler) bool {
