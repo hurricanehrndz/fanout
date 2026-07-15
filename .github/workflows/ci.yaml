@@ -26,9 +26,9 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v2
-      - uses: actions/setup-go@v1
+      - uses: actions/setup-go@v6
         with:
-          go-version: 1.21
+          go-version: 1.25.6
       - run: |
           go build -race  ./...
   test:
@@ -36,9 +36,9 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v2
-      - uses: actions/setup-go@v1
+      - uses: actions/setup-go@v6
         with:
-          go-version: 1.21
+          go-version: 1.25.6
       - name: Install gotestsum
         run: go install gotest.tools/gotestsum@v0.4.0
       - name: Run tests
@@ -66,12 +66,12 @@ jobs:
       ORG: networkservicemesh
     steps:
       - uses: actions/checkout@v2
-      - uses: actions/setup-go@v1
+      - uses: actions/setup-go@v6
         with:
-          go-version: 1.21
+          go-version: 1.25.6
       - name: build coredns binary
         run: |
-          go build -o coredns/coredns coredns/main.go
+          go -C coredns build -o coredns .
       - name: build docker image
         run: |
           docker build coredns/. -t "${ORG}/coredns:${TAG}"
@@ -109,9 +109,9 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v2
-      - uses: actions/setup-go@v1
+      - uses: actions/setup-go@v6
         with:
-          go-version: 1.21
+          go-version: 1.25.6
       - run: go mod tidy
       - name: Check for changes in go.mod or go.sum
         run: |
@@ -122,9 +122,9 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v2
-      - uses: actions/setup-go@v1
+      - uses: actions/setup-go@v6
         with:
-          go-version: 1.21
+          go-version: 1.25.6
       - name: Install go-header
         run: 'go install github.com/denis-tingajkin/go-header@v0.2.2'
       - name: Run go-header

@@ -15,6 +15,6 @@ $ make
 As alternative you can create your own `main.go` file and build your own Coredns binary. Take a look at [Official example](https://coredns.io/2017/07/25/compile-time-enabling-or-disabling-plugins/). After that you will need also to create your own `Dockerfile`.
 You can also use files prepared for networkservicemesh. For this you need to run:
 ```bash
-$ go build -o coredns/coredns coredns/main.go
+$ go -C coredns build -o coredns .
 $ docker build coredns/. -t "${ORG}/coredns:${TAG}"
 ```

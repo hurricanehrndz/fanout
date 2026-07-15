@@ -44,12 +44,12 @@ jobs:
         with:
           ref: refs/heads/${{github.event.workflow_run.head_branch}}
 
-      - uses: actions/setup-go@v1
+      - uses: actions/setup-go@v6
         with:
-          go-version: 1.21
+          go-version: 1.25.6
       - name: "Build coredns binary"
         run: |
-          go build -o coredns/coredns coredns/main.go
+          go -C coredns build -o coredns .
 
       - name: "Set up Docker Buildx"
         uses: docker/setup-buildx-action@v1
