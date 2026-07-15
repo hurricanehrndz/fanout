@@ -34,6 +34,7 @@ Each incoming DNS query that hits the CoreDNS fanout plugin will be replicated i
 * `except-file` is the path to file with line-separated list of domains to exclude from proxying.
 * `attempt-count` is the number of attempts to connect to upstream servers that are needed before considering an upstream to be down. If 0, the upstream will never be marked as down and request will be finished by `timeout`. Default is `3`.
 * `timeout` is the timeout of request. After this period, attempts to receive a response from the upstream servers will be stopped. Default is `30s`.
+* `udp-buffer-size` is the UDP buffer size advertised in EDNS0 requests to upstream servers. This overrides the buffer size from client requests. Minimum value is `1232` bytes (RFC 6891). This setting only affects UDP queries; TCP queries are unaffected. Default is `1232`. Should only be used with local resolvers.
 * `race` gives priority to the first result, whether it is negative or not, as long as it is a standard DNS result.
 ## Metrics
 
@@ -132,6 +133,15 @@ Sends parallel requests between three resolver sequentially (default mode).
 example.org {
     fanout . 127.0.0.1:9005 127.0.0.1:9006 127.0.0.1:9007 {
         policy sequential
+    }
+}
+~~~
+
+Use a larger UDP buffer size for upstream queries. This can help prevent truncation for large responses.
+~~~ corefile
+. {
+    fanout . 8.8.8.8 8.8.4.4 {
+        udp-buffer-size 4096
     }
 }
 ~~~

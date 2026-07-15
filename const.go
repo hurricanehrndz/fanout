@@ -30,6 +30,7 @@ const (
 	defaultTimeout       = 30 * time.Second
 	readTimeout          = 2 * time.Second
 	attemptDelay         = time.Millisecond * 100
+	minUDPBufferSize     = 1232      // Minimum UDP buffer size for DNS (RFC 6891)
 	TCPTLS               = "tcp-tls" // TCPTLS Net type for a Client.
 	TCP                  = "tcp"     // TCP Net type for a Client.
 	UDP                  = "udp"     // UDP Net type for a Client.

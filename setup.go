@@ -83,7 +83,6 @@ func setup(c *caddy.Controller) error {
 			return f.OnStartup()
 		})
 
-
 		c.OnShutdown(func() error {
 			return f.OnShutdown()
 		})
@@ -161,7 +160,7 @@ func initClients(f *Fanout, hosts []string) {
 	transports := make([]string, len(hosts))
 	for i, host := range hosts {
 		trans, h := parse.Transport(host)
-		f.clients = append(f.clients, NewClient(h, f.net))
+		f.clients = append(f.clients, NewClientWithUDPBufferSize(h, f.net, f.udpBufferSize))
 		transports[i] = trans
 	}
 
@@ -229,6 +228,10 @@ func parseValue(v string, f *Fanout, c *caddyfile.Dispenser) error {
 	case "attempt-count":
 		num, err := parsePositiveInt(c)
 		f.Attempts = num
+		return err
+	case "udp-buffer-size":
+		num, err := parsePositiveInt(c)
+		f.udpBufferSize = max(uint16(minUDPBufferSize), uint16(num))
 		return err
 	case "next":
 		return parseNext(f, c)
