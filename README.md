@@ -1,12 +1,12 @@
 # fanout
-![ci](https://github.com/networkservicemesh/fanout/workflows/ci/badge.svg)
+[![CI](https://github.com/networkservicemesh/fanout/actions/workflows/ci.yaml/badge.svg?event=pull_request)](https://github.com/networkservicemesh/fanout/actions/workflows/ci.yaml)
 ## Name
 
 *fanout* - parallel proxying DNS messages to upstream resolvers.
 
 ## Description
 
-Each incoming DNS query that hits the CoreDNS fanout plugin will be replicated in parallel to each listed IP (i.e. the DNS servers). Without `race`, the first valid answer-bearing NOERROR response is forwarded; NODATA and negative responses are retained as fallbacks while waiting.
+Each incoming DNS query that matches the CoreDNS fanout plugin is sent concurrently to the selected upstream resolvers. Without `race`, the first valid answer-bearing NOERROR response is forwarded; NODATA and negative responses are retained as fallbacks while waiting.
 
 ## Syntax
 
@@ -29,13 +29,19 @@ Each incoming DNS query that hits the CoreDNS fanout plugin will be replicated i
   * `weighted-random` - select DNS servers randomly based on `weighted-random-server-count` and `weighted-random-load-factor` params.
 * `weighted-random-server-count` is the number of DNS servers to be requested. Equals to the number of specified IPs by default. Used only with the `weighted-random` policy.
 * `weighted-random-load-factor` - the probability of selecting a server. This is specified in the order of the list of IP addresses and takes values between 1 and 100. By default, all servers have an equal probability of 100. Used only with the `weighted-random` policy.
-* `network` is a specific network protocol. Could be `tcp`, `udp`, `tcp-tls`.
-* `except` is a list is a space-separated list of domains to exclude from proxying.
-* `except-file` is the path to file with line-separated list of domains to exclude from proxying.
-* `attempt-count` is the number of attempts to connect to upstream servers that are needed before considering an upstream to be down. If 0, the upstream will never be marked as down and request will be finished by `timeout`. Default is `3`.
-* `timeout` is the timeout of request. After this period, attempts to receive a response from the upstream servers will be stopped. Default is `30s`.
+* `network` is the upstream network protocol: `tcp`, `udp`, or `tcp-tls`. UDP responses with the truncated flag set are retried over TCP automatically.
+* `except` is a space-separated list of domains to exclude from proxying.
+* `except-file` is the path to a file containing one excluded domain per line.
+* `attempt-count` is the number of attempts per selected upstream before returning its error. If `0`, attempts continue until `timeout`. Default is `3`.
+* `timeout` is the overall request timeout. After this period, attempts to receive a response from the upstream servers stop. Default is `30s`.
 * `udp-buffer-size` overrides the UDP buffer size advertised in EDNS0 requests to upstream servers. Minimum value is `1232` bytes (RFC 6891). When omitted, existing EDNS0 is preserved and requests without EDNS0 advertise `1232`. This setting only affects UDP queries; TCP queries are unaffected. Should only be used with local resolvers.
-* `race` gives priority to the first result, whether it is negative or not, as long as it is a standard DNS result.
+* `race` returns the first valid DNS result, including NODATA or a negative response, instead of waiting for an answer-bearing NOERROR response.
+* `next` **RCODE...** delegates to the next `fanout` stanza when the result has one of the listed DNS response codes, such as `NXDOMAIN` or `SERVFAIL`. It is ignored when the next handler is not another `fanout` stanza.
+
+## Metadata
+
+If the *metadata* plugin is enabled, `fanout/upstream` contains the upstream that supplied the response. If the *dnstap* plugin is enabled, fanout emits the selected upstream query and response.
+
 ## Metrics
 
 If monitoring is enabled (via the *prometheus* plugin) then the following metric are exported:
@@ -56,7 +62,7 @@ example.org {
 }
 ~~~
 
-Sends parallel requests between three resolvers, one of which has a IPv6 address via TCP. The first response from proxy will be provided as the result.
+Sends parallel requests between three resolvers, one of which has an IPv6 address, via TCP. The first positive response from a proxy will be provided as the result.
 
 ~~~ corefile
 . {
@@ -98,7 +104,7 @@ used in the TLS negotiation.
 }
 ~~~
 
-Sends parallel requests between five resolvers via UDP uses two workers and without attempting to reconnect. The first positive response from a proxy will be provided as the result.
+Sends parallel requests between five resolvers via UDP using two workers. The first positive response from a proxy will be provided as the result.
 ~~~ corefile
 . {
     fanout . 10.0.0.10:53 10.0.0.11:53 10.0.0.12:53 10.0.0.13:1053 10.0.0.14:1053 {
@@ -107,8 +113,8 @@ Sends parallel requests between five resolvers via UDP uses two workers and with
 }
 ~~~
 
-Multiple upstream servers are configured but one of them is down, query a `non-existent` domain.
-If `race` is enable, we will get `NXDOMAIN` result quickly, otherwise we will get `"connection timed out"` result in a few seconds.
+Multiple upstream servers are configured but one of them is down while querying a `non-existent` domain.
+With `race` enabled, the first valid `NXDOMAIN` response is returned immediately. Otherwise, fanout retains it as a fallback while the remaining selected upstreams complete or time out.
 ~~~ corefile
 . {
     fanout . 10.0.0.10:53 10.0.0.11:53 10.0.0.12:53 10.0.0.13:1053 10.0.0.14:1053 {
@@ -117,7 +123,17 @@ If `race` is enable, we will get `NXDOMAIN` result quickly, otherwise we will ge
 }
 ~~~
 
-Sends parallel requests between two randomly selected resolvers. Note, that `127.0.0.1:9007` would be selected more frequently as it has the highest `weighted-random-load-factor`.
+Chain two fanout configurations, using the second when the first returns `NXDOMAIN` or `SERVFAIL`.
+~~~ corefile
+. {
+    fanout . 10.0.0.10:53 10.0.0.11:53 {
+        next NXDOMAIN SERVFAIL
+    }
+    fanout . 192.0.2.10:53 192.0.2.11:53
+}
+~~~
+
+Sends parallel requests between two randomly selected resolvers. Note that `127.0.0.1:9007` is selected more frequently because it has the highest `weighted-random-load-factor`.
 ~~~ corefile
 example.org {
     fanout . 127.0.0.1:9005 127.0.0.1:9006 127.0.0.1:9007 {
