@@ -12,63 +12,69 @@ jobs:
     name: Create Release
     runs-on: ubuntu-latest
     if: ${{ github.event.workflow_run.conclusion == 'success' && contains(github.event.workflow_run.head_branch, 'release/') }}
-    outputs:
-      tag: ${{ needs.check-gomod-deps.outputs.tag }}
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v2
+        uses: actions/checkout@v7
         with:
           ref: refs/heads/${{github.event.workflow_run.head_branch}}
 
-      - name: Push tag ${{ needs.check-gomod-deps.outputs.tag }}
+      - name: Get tag
+        id: get-tag-step
+        env:
+          BRANCH: ${{ github.event.workflow_run.head_branch }}
+        run: echo "tag=${BRANCH#release/}" >> "$GITHUB_OUTPUT"
+
+      - name: Push tag ${{ steps.get-tag-step.outputs.tag }}
+        env:
+          TAG: ${{ steps.get-tag-step.outputs.tag }}
         run: |
           git status
-          git tag ${{ needs.check-gomod-deps.outputs.tag }}
-          git push origin ${{ needs.check-gomod-deps.outputs.tag }} -f
-      - name: Create release ${{ needs.check-gomod-deps.outputs.tag }}
-        uses: actions/create-release@v1
+          git tag "$TAG"
+          git push origin "$TAG" -f
+      - name: Create release ${{ steps.get-tag-step.outputs.tag }}
         env:
-          GITHUB_TOKEN: ${{ secrets.NSM_BOT_GITHUB_TOKEN }}
-        with:
-          tag_name: refs/tags/${{ needs.check-gomod-deps.outputs.tag }}
-          release_name: ${{ needs.check-gomod-deps.outputs.tag }}
-          draft: false
-          prerelease: false
+          GH_TOKEN: ${{ secrets.NSM_BOT_GITHUB_TOKEN }}
+          TAG: ${{ steps.get-tag-step.outputs.tag }}
+        run: |
+          gh release create "$TAG" \
+            --title "$TAG" \
+            --notes "" \
+            --verify-tag
 
   docker:
     runs-on: ubuntu-latest
     if: ${{ github.event.workflow_run.conclusion == 'success' && contains(github.event.workflow_run.head_branch, 'release/') }}
     steps:
       - name: "Checkout"
-        uses: actions/checkout@v2
+        uses: actions/checkout@v7
         with:
           ref: refs/heads/${{github.event.workflow_run.head_branch}}
 
-      - uses: actions/setup-go@v1
+      - uses: actions/setup-go@v6
         with:
-          go-version: 1.21
+          go-version: 1.26.5
       - name: "Build coredns binary"
         run: |
-          go build -o coredns/coredns coredns/main.go
+          go -C coredns build -o coredns .
 
       - name: "Set up Docker Buildx"
-        uses: docker/setup-buildx-action@v1
+        uses: docker/setup-buildx-action@v4
 
       - name: "Login to GitHub Container Registry"
-        uses: docker/login-action@v1
+        uses: docker/login-action@v4
         with:
           registry: ghcr.io
           username: ${{ github.repository_owner }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Get tag
-        run: |
-          branch=${{github.event.workflow_run.head_branch}}
-          echo '::set-output name=tag::'${branch#release/}
         id: get-tag-step
+        env:
+          BRANCH: ${{ github.event.workflow_run.head_branch }}
+        run: echo "tag=${BRANCH#release/}" >> "$GITHUB_OUTPUT"
 
       - name: "Build and push"
-        uses: docker/build-push-action@v2
+        uses: docker/build-push-action@v7
         with:
           file: coredns/Dockerfile
           context: .

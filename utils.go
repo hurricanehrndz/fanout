@@ -47,7 +47,7 @@ func toDnstap(tapPlugin *dnstap.Dnstap, client Client, state *request.Request, r
 	var ta net.Addr = &net.UDPAddr{IP: ip, Port: int(port)}
 	t := client.Net()
 
-	if t == "tcp" {
+	if t == TCP {
 		ta = &net.TCPAddr{IP: ip, Port: int(port)}
 	}
 

@@ -7,9 +7,9 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Check out code into the Go module directory
-        uses: actions/checkout@v2
+        uses: actions/checkout@v7
       - name: Setup Python
-        uses: actions/setup-python@v1
+        uses: actions/setup-python@v6
       - name: Install yamllint
         run: pip install --user yamllint
       - name: Run yamllint
@@ -18,27 +18,27 @@ jobs:
     name: shellcheck
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v2
+      - uses: actions/checkout@v7
       - name: shellcheck
         uses: fkautz/shell-linter@v1.0.1
   build:
     name: build
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v2
-      - uses: actions/setup-go@v1
+      - uses: actions/checkout@v7
+      - uses: actions/setup-go@v6
         with:
-          go-version: 1.21
+          go-version: 1.26.5
       - run: |
           go build -race  ./...
   test:
     name: test
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v2
-      - uses: actions/setup-go@v1
+      - uses: actions/checkout@v7
+      - uses: actions/setup-go@v6
         with:
-          go-version: 1.21
+          go-version: 1.26.5
       - name: Install gotestsum
         run: go install gotest.tools/gotestsum@v0.4.0
       - name: Run tests
@@ -50,12 +50,16 @@ jobs:
     name: golangci-lint
     runs-on: ubuntu-latest
     env:
-      GOLANGCI_LINT_CONTAINER: golangci/golangci-lint:v1.59.1
+      GOLANGCI_LINT_CONTAINER: golangci/golangci-lint:v2.12.2
     steps:
       - name: Check out code into the Go module directory
-        uses: actions/checkout@v2
+        uses: actions/checkout@v7
       - name: Pull golangci-lint docker container
         run: docker pull ${GOLANGCI_LINT_CONTAINER}
+      - name: Format with golangci-lint
+        run: |
+          docker run --rm -v $(pwd):/app -w /app ${GOLANGCI_LINT_CONTAINER} golangci-lint fmt
+          git diff --exit-code
       - name: Run golangci-lint
         run: docker run --rm -v $(pwd):/app -w /app ${GOLANGCI_LINT_CONTAINER} golangci-lint run
   buildDockerImage:
@@ -65,13 +69,13 @@ jobs:
       TAG: test
       ORG: networkservicemesh
     steps:
-      - uses: actions/checkout@v2
-      - uses: actions/setup-go@v1
+      - uses: actions/checkout@v7
+      - uses: actions/setup-go@v6
         with:
-          go-version: 1.21
+          go-version: 1.26.5
       - name: build coredns binary
         run: |
-          go build -o coredns/coredns coredns/main.go
+          go -C coredns build -o coredns .
       - name: build docker image
         run: |
           docker build coredns/. -t "${ORG}/coredns:${TAG}"
@@ -82,7 +86,7 @@ jobs:
     name: exclude fmt.Errorf
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v2
+      - uses: actions/checkout@v7
       - name: Exclude fmt.Errorf
         run: |
           if grep -r --include=*.go fmt.Errorf . ; then
@@ -94,7 +98,7 @@ jobs:
     name: Restrict dependencies on github.com/networkservicemesh/*
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v2
+      - uses: actions/checkout@v7
       - name: Restrict dependencies on github.com/networkservicemesh/*
         run: |
           for i in $(grep github.com/networkservicemesh/ go.mod |grep -v '^module' | sed 's;.*\(github.com\/networkservicemesh\/[a-zA-z\/]*\).*;\1;g' | sort -u);do
@@ -108,10 +112,10 @@ jobs:
     name: check go.mod and go.sum
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v2
-      - uses: actions/setup-go@v1
+      - uses: actions/checkout@v7
+      - uses: actions/setup-go@v6
         with:
-          go-version: 1.21
+          go-version: 1.26.5
       - run: go mod tidy
       - name: Check for changes in go.mod or go.sum
         run: |
@@ -121,10 +125,10 @@ jobs:
     name: license header check
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v2
-      - uses: actions/setup-go@v1
+      - uses: actions/checkout@v7
+      - uses: actions/setup-go@v6
         with:
-          go-version: 1.21
+          go-version: 1.26.5
       - name: Install go-header
         run: 'go install github.com/denis-tingajkin/go-header@v0.2.2'
       - name: Run go-header
@@ -136,7 +140,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Check out the code
-        uses: actions/checkout@v2
+        uses: actions/checkout@v7
       - name: Exclude replace in go.mod
         run: |
           grep ^replace go.mod || exit 0

@@ -35,7 +35,7 @@ import (
 	"github.com/pkg/errors"
 )
 
-var log = clog.NewWithPlugin("fanout")
+var log = clog.NewWithPlugin(pluginName)
 
 // Fanout represents a plugin instance that can do async requests to list of DNS servers.
 type Fanout struct {
@@ -63,7 +63,7 @@ type Fanout struct {
 func New() *Fanout {
 	return &Fanout{
 		tlsConfig:             new(tls.Config),
-		net:                   "udp",
+		net:                   UDP,
 		Attempts:              3,
 		Timeout:               defaultTimeout,
 		ExcludeDomains:        NewDomain(),
@@ -81,7 +81,7 @@ func (f *Fanout) AddClient(p Client) {
 
 // Name implements plugin.Handler.
 func (f *Fanout) Name() string {
-	return "fanout"
+	return pluginName
 }
 
 // ServeDNS implements plugin.Handler.

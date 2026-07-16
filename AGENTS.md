@@ -5,14 +5,14 @@
 - **Test all**: `go test -race -short $(go list ./...)`
 - **Test single package**: `go test -race -short ./path/to/package`
 - **Test specific test**: `go test -race -short -run TestName ./path/to/package`
-- **Lint**: `golangci-lint run` (requires golangci-lint v1.59.1+)
-- **Format**: `gofmt -w .` and `goimports -w .`
+- **Lint**: `golangci-lint run` (requires golangci-lint v2)
+- **Format**: `golangci-lint fmt`
 
 ## Code Style
 - **License header**: All `.go` files require Apache 2.0 license header (see `.license/template.txt`)
 - **Imports**: Use `goimports` with `local-prefixes: github.com/networkservicemesh/sdk`; standard library → third-party → local packages
 - **Error handling**: MUST use `github.com/pkg/errors` (errors.Wrap, errors.Wrapf, errors.New, errors.Errorf); NEVER use `fmt.Errorf` or stdlib `errors`
-- **Formatting**: Use `gofmt`; follow standard Go conventions
+- **Formatting**: Use `golangci-lint fmt`; follow standard Go conventions
 - **Naming**: Standard Go naming (camelCase for unexported, PascalCase for exported)
 - **Comments**: Public symbols require doc comments; use godoc format
 - **Cyclomatic complexity**: Keep functions under 15 complexity

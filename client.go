@@ -20,6 +20,7 @@ import (
 	"context"
 	"crypto/tls"
 	"fmt"
+	"math"
 	"time"
 
 	"github.com/coredns/coredns/request"
@@ -54,6 +55,7 @@ func NewClient(addr, net string) Client {
 	return a
 }
 
+// NewClientWithUDPBufferSize creates a client with a specific UDP buffer size.
 func NewClientWithUDPBufferSize(addr, net string, udpBufferSize uint16) Client {
 	a := &client{
 		addr:          addr,
@@ -110,7 +112,11 @@ func (c *client) Request(ctx context.Context, r *request.Request) (*dns.Msg, err
 			}
 		}()
 
-		conn.UDPSize = max(uint16(r.Size()), c.udpBufferSize)
+		udpSize := r.Size()
+		if udpSize > math.MaxUint16 {
+			udpSize = math.MaxUint16
+		}
+		conn.UDPSize = max(uint16(udpSize), c.udpBufferSize)
 
 		go func() {
 			<-ctx.Done()

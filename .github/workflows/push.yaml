@@ -14,20 +14,20 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: "Checkout"
-        uses: actions/checkout@v2
+        uses: actions/checkout@v7
 
-      - uses: actions/setup-go@v1
+      - uses: actions/setup-go@v6
         with:
-          go-version: 1.21
+          go-version: 1.26.5
       - name: "Build coredns binary"
         run: |
-          go build -o coredns/coredns coredns/main.go
+          go -C coredns build -o coredns .
 
       - name: "Set up Docker Buildx"
-        uses: docker/setup-buildx-action@v1
+        uses: docker/setup-buildx-action@v4
 
       - name: "Login to GitHub Container Registry"
-        uses: docker/login-action@v1
+        uses: docker/login-action@v4
         with:
           registry: ghcr.io
           username: ${{ github.repository_owner }}
@@ -35,14 +35,14 @@ jobs:
 
       - name: Docker meta
         id: metaci
-        uses: docker/metadata-action@v3
+        uses: docker/metadata-action@v6
         with:
           images: ghcr.io/${{ github.repository_owner }}/ci/coredns
           tags: |
             type=ref,event=pr
             type=sha,prefix=
       - name: "Build and push"
-        uses: docker/build-push-action@v2
+        uses: docker/build-push-action@v7
         with:
           file: coredns/Dockerfile
           context: .
