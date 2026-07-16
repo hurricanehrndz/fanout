@@ -80,8 +80,7 @@ jobs:
         run: |
           docker build coredns/. -t "${ORG}/coredns:${TAG}"
       - name: remove docker image
-        run:
-          docker image rm "${ORG}/coredns:${TAG}"
+        run: docker image rm "${ORG}/coredns:${TAG}"
   excludeFmtErrorf:
     name: exclude fmt.Errorf
     runs-on: ubuntu-latest

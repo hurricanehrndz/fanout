@@ -8,6 +8,7 @@ yaml-files:
 ignore: |
   .devenv/
   .direnv/
+  .pre-commit-config.yaml
 
 rules:
   truthy: disable
