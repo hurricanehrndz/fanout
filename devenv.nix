@@ -4,11 +4,11 @@
   # Rolling nixpkgs keeps only the latest patch release; Go's native toolchain manager pins the requested one.
   env = {
     GOPATH = config.env.DEVENV_STATE + "/go";
-    GOTOOLCHAIN = "go1.25.6";
+    GOTOOLCHAIN = "go1.26.5";
   };
 
   packages = with pkgs; [
-    go_1_25
+    go_1_26
     golangci-lint
     gotestsum
     shellcheck
