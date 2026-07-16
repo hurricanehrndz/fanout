@@ -20,6 +20,7 @@ import (
 	"context"
 	"crypto/tls"
 	"fmt"
+	"math"
 	"time"
 
 	"github.com/coredns/coredns/request"
@@ -110,7 +111,11 @@ func (c *client) Request(ctx context.Context, r *request.Request) (*dns.Msg, err
 			}
 		}()
 
-		conn.UDPSize = max(uint16(r.Size()), c.udpBufferSize)
+		udpSize := r.Size()
+		if udpSize > math.MaxUint16 {
+			udpSize = math.MaxUint16
+		}
+		conn.UDPSize = max(uint16(udpSize), c.udpBufferSize)
 
 		go func() {
 			<-ctx.Done()

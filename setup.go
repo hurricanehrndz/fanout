@@ -20,6 +20,7 @@ package fanout
 
 import (
 	"fmt"
+	"math"
 	"math/rand"
 	"os"
 	"path/filepath"
@@ -231,8 +232,15 @@ func parseValue(v string, f *Fanout, c *caddyfile.Dispenser) error {
 		return err
 	case "udp-buffer-size":
 		num, err := parsePositiveInt(c)
-		f.udpBufferSize = max(uint16(minUDPBufferSize), uint16(num))
-		return err
+		if err != nil {
+			return err
+		}
+		if num > math.MaxUint16 {
+			return errors.Errorf("udp-buffer-size must not exceed %d", math.MaxUint16)
+		}
+		// parsePositiveInt and the upper-bound check make this conversion safe.
+		f.udpBufferSize = max(uint16(minUDPBufferSize), uint16(num)) //nolint:gosec
+		return nil
 	case "next":
 		return parseNext(f, c)
 	default:

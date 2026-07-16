@@ -67,6 +67,7 @@ func TestSetup(t *testing.T) {
 		{input: "fanout . 127.0.0.1 {\npolicy weighted-random \nweighted-random-load-factor 50 100\n}", expectedErr: "load-factor params count must be the same as the number of hosts"},
 		{input: "fanout . 127.0.0.1 127.0.0.2 {\npolicy weighted-random \nweighted-random-load-factor 50\n}", expectedErr: "load-factor params count must be the same as the number of hosts"},
 		{input: "fanout . 127.0.0.1 127.0.0.2 {\npolicy weighted-random \nweighted-random-load-factor \n}", expectedErr: "Wrong argument count or unexpected line ending"},
+		{input: "fanout . 127.0.0.1 {\nudp-buffer-size 65536\n}", expectedErr: "udp-buffer-size must not exceed 65535"},
 	}
 
 	for i, test := range tests {
