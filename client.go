@@ -95,22 +95,26 @@ func (c *client) Request(ctx context.Context, r *request.Request) (*dns.Msg, err
 	}
 	start := time.Now()
 	network := c.net
+	requestDone := make(chan struct{})
+	defer close(requestDone)
 
-	var conn *dns.Conn
-	var err error
-	for {
-		if conn != nil {
-			_ = conn.Close()
+	req := r.Req
+	if network == UDP {
+		req = r.Req.Copy()
+		opt := req.IsEdns0()
+		if opt == nil {
+			req.SetEdns0(c.udpBufferSize, false)
+		} else {
+			opt.SetUDPSize(c.udpBufferSize)
 		}
-		conn, err = c.transport.Dial(ctx, network)
+	}
+
+	for {
+		conn, err := c.transport.Dial(ctx, network)
 		if err != nil {
 			return nil, err
 		}
-		defer func() {
-			if conn != nil {
-				_ = conn.Close()
-			}
-		}()
+		defer conn.Close() //nolint:errcheck
 
 		udpSize := r.Size()
 		if udpSize > math.MaxUint16 {
@@ -118,14 +122,17 @@ func (c *client) Request(ctx context.Context, r *request.Request) (*dns.Msg, err
 		}
 		conn.UDPSize = max(uint16(udpSize), c.udpBufferSize)
 
-		go func() {
-			<-ctx.Done()
-			_ = conn.Close()
-		}()
+		go func(conn *dns.Conn) {
+			select {
+			case <-ctx.Done():
+				_ = conn.Close()
+			case <-requestDone:
+			}
+		}(conn)
 		if err = conn.SetWriteDeadline(time.Now().Add(maxTimeout)); err != nil {
 			return nil, err
 		}
-		if err = conn.WriteMsg(r.Req); err != nil {
+		if err = conn.WriteMsg(req); err != nil {
 			return nil, err
 		}
 		if err = conn.SetReadDeadline(time.Now().Add(readTimeout)); err != nil {
@@ -144,6 +151,7 @@ func (c *client) Request(ctx context.Context, r *request.Request) (*dns.Msg, err
 		}
 
 		if ret.Truncated && network == UDP {
+			_ = conn.Close()
 			network = TCP
 			continue
 		}

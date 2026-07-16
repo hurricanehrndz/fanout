@@ -165,7 +165,7 @@ func initClients(f *Fanout, hosts []string) {
 
 	f.tlsConfig.ServerName = f.tlsServerName
 	for i := range f.clients {
-		if transports[i] == transport.TLS {
+		if transports[i] == transport.TLS || f.net == TCPTLS {
 			f.clients[i].SetTLSConfig(f.tlsConfig)
 		}
 	}

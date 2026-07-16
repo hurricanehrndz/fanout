@@ -19,6 +19,8 @@
 package fanout
 
 import (
+	"crypto/tls"
+	"crypto/x509"
 	"os"
 	"reflect"
 	"strings"
@@ -30,18 +32,19 @@ import (
 
 func TestSetup(t *testing.T) {
 	tests := []struct {
-		input               string
-		expectedFrom        string
-		expectedTo          []string
-		expectedIgnored     []string
-		expectedWorkers     int
-		expectedAttempts    int
-		expectedTimeout     time.Duration
-		expectedNetwork     string
-		expectedServerCount int
-		expectedLoadFactor  []int
-		expectedPolicy      string
-		expectedErr         string
+		input                 string
+		expectedFrom          string
+		expectedTo            []string
+		expectedIgnored       []string
+		expectedWorkers       int
+		expectedAttempts      int
+		expectedTimeout       time.Duration
+		expectedNetwork       string
+		expectedServerCount   int
+		expectedLoadFactor    []int
+		expectedPolicy        string
+		expectedUDPBufferSize uint16
+		expectedErr           string
 	}{
 		// positive
 		{input: "fanout . 127.0.0.1 {\npolicy weighted-random \nweighted-random-server-count 5 weighted-random-load-factor 100\n}", expectedFrom: ".", expectedAttempts: 3, expectedWorkers: 1, expectedTimeout: defaultTimeout, expectedNetwork: "udp", expectedServerCount: 1, expectedLoadFactor: []int{100}, expectedPolicy: policyWeightedRandom},
@@ -53,6 +56,7 @@ func TestSetup(t *testing.T) {
 		{input: "fanout . 127.0.0.1 127.0.0.2 127.0.0.3 127.0.0.4 {\nattempt-count 2\n}", expectedTimeout: defaultTimeout, expectedFrom: ".", expectedAttempts: 2, expectedWorkers: 4, expectedNetwork: "udp", expectedServerCount: 4, expectedLoadFactor: nil, expectedPolicy: ""},
 		{input: "fanout . 127.0.0.1 127.0.0.2 127.0.0.3 {\npolicy weighted-random \n}", expectedFrom: ".", expectedAttempts: 3, expectedWorkers: 3, expectedTimeout: defaultTimeout, expectedNetwork: "udp", expectedServerCount: 3, expectedLoadFactor: []int{100, 100, 100}, expectedPolicy: policyWeightedRandom},
 		{input: "fanout . 127.0.0.1 127.0.0.2 127.0.0.3 {\npolicy sequential\nworker-count 3\n}", expectedFrom: ".", expectedAttempts: 3, expectedWorkers: 3, expectedTimeout: defaultTimeout, expectedNetwork: "udp", expectedServerCount: 3, expectedLoadFactor: nil, expectedPolicy: policySequential},
+		{input: "fanout . 127.0.0.1 {\nudp-buffer-size 65535\n}", expectedFrom: ".", expectedAttempts: 3, expectedWorkers: 1, expectedTimeout: defaultTimeout, expectedNetwork: "udp", expectedServerCount: 1, expectedPolicy: "", expectedUDPBufferSize: 65535},
 
 		// negative
 		{input: "fanout . aaa", expectedErr: "not an IP address or file"},
@@ -124,6 +128,15 @@ func TestSetup(t *testing.T) {
 		if f.policyType != test.expectedPolicy {
 			t.Fatalf("Test %d: expected: %s, got: %s", i, test.expectedPolicy, f.policyType)
 		}
+		if test.expectedUDPBufferSize != 0 {
+			if f.udpBufferSize != test.expectedUDPBufferSize {
+				t.Fatalf("Test %d: expected UDP buffer size: %d, got: %d", i, test.expectedUDPBufferSize, f.udpBufferSize)
+			}
+			client, ok := f.clients[0].(*client)
+			if !ok || client.udpBufferSize != test.expectedUDPBufferSize {
+				t.Fatalf("Test %d: client did not receive UDP buffer size %d", i, test.expectedUDPBufferSize)
+			}
+		}
 
 		selectionPolicy, ok := f.ServerSelectionPolicy.(*WeightedPolicy)
 		if len(test.expectedLoadFactor) > 0 {
@@ -136,6 +149,47 @@ func TestSetup(t *testing.T) {
 		} else if ok {
 			t.Fatalf("Test %d: expected sequential policy to be set, got: %T", i, f.ServerSelectionPolicy)
 		}
+	}
+}
+
+func TestInitClientsAppliesTLSConfigForGlobalTCPTLS(t *testing.T) {
+	roots := x509.NewCertPool()
+	certificate := tls.Certificate{Certificate: [][]byte{{1, 2, 3}}}
+
+	tests := []struct {
+		name    string
+		host    string
+		network string
+	}{
+		{name: "TLS endpoint", host: "tls://127.0.0.1", network: UDP},
+		{name: "global TCP-TLS", host: "127.0.0.1", network: TCPTLS},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			f := New()
+			f.net = test.network
+			f.tlsServerName = "dns.example"
+			f.tlsConfig = &tls.Config{RootCAs: roots, Certificates: []tls.Certificate{certificate}}
+
+			initClients(f, []string{test.host})
+
+			client, ok := f.clients[0].(*client)
+			if !ok {
+				t.Fatalf("expected *client, got %T", f.clients[0])
+			}
+			transport, ok := client.transport.(*transportImpl)
+			if !ok {
+				t.Fatalf("expected *transportImpl, got %T", client.transport)
+			}
+			if transport.tlsConfig != f.tlsConfig {
+				t.Fatal("transport did not receive the complete TLS config object")
+			}
+			if transport.tlsConfig.ServerName != "dns.example" || transport.tlsConfig.RootCAs != roots ||
+				!reflect.DeepEqual(transport.tlsConfig.Certificates, []tls.Certificate{certificate}) {
+				t.Fatal("transport TLS config fields were not preserved")
+			}
+		})
 	}
 }
 

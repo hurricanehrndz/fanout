@@ -1,3 +1,19 @@
+// Copyright (c) 2020 Doc.ai and/or its affiliates.
+//
+// SPDX-License-Identifier: Apache-2.0
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at:
+//
+//     http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
 package fanout
 
 import (
@@ -10,27 +26,103 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func TestUseRequestSizeOnConn(t *testing.T) {
-	s := newServer("udp", func(w dns.ResponseWriter, r *dns.Msg) {
-		msg := dns.Msg{
-			Answer: []dns.RR{
-				makeRecordA("abcdefghijklmnopqrstuvwxyzabcdefghijklmnopqrstuvwxyzabcdefghijk.abcdefghijklmnopqrstuvwxyzabcdefghijklmnopqrstuvwxyzabcdefghijk.abcdefghijklmnopqrstuvwxyzabcdefghijklmnopqrstuvwxyzabcdefghijk. 3600	IN	A 10.0.0.1"),
-				makeRecordA("abcdefghijklmnopqrstuvwxyzabcdefghijklmnopqrstuvwxyzabcdefghijk.abcdefghijklmnopqrstuvwxyzabcdefghijklmnopqrstuvwxyzabcdefghijk.abcdefghijklmnopqrstuvwxyzabcdefghijklmnopqrstuvwxyzabcdefghijk. 3600	IN	A 10.0.0.1"),
-				makeRecordA("abcdefghijklmnopqrstuvwxyzabcdefghijklmnopqrstuvwxyzabcdefghijk.abcdefghijklmnopqrstuvwxyzabcdefghijklmnopqrstuvwxyzabcdefghijk.abcdefghijklmnopqrstuvwxyzabcdefghijklmnopqrstuvwxyzabcdefghijk. 3600	IN	A 10.0.0.1"),
-			},
-		}
-		msg.SetReply(r)
-		logErrIfNotNil(w.WriteMsg(&msg))
-	})
-	defer s.close()
-	c := NewClient(s.addr, "udp")
-	req := new(dns.Msg)
-	req.SetEdns0(dns.DefaultMsgSize, false)
-	req.SetQuestion(testQuery, dns.TypeA)
+func TestClientAdvertisesConfiguredUDPBufferSizeWithoutMutatingRequest(t *testing.T) {
+	tests := []struct {
+		name       string
+		configured uint16
+		withOPT    bool
+	}{
+		{name: "replace existing OPT", configured: 4096, withOPT: true},
+		{name: "add absent OPT", configured: 65535},
+	}
 
-	ctx, cancel := context.WithCancel(context.TODO())
-	defer cancel()
-	d, err := c.Request(ctx, &request.Request{W: &test.ResponseWriter{}, Req: req})
-	require.Nil(t, err)
-	require.Len(t, d.Answer, 3)
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			received := make(chan *dns.Msg, 1)
+			s := newServer(UDP, func(w dns.ResponseWriter, req *dns.Msg) {
+				received <- req.Copy()
+				resp := new(dns.Msg)
+				resp.SetReply(req)
+				logErrIfNotNil(w.WriteMsg(resp))
+			})
+			defer s.close()
+
+			req := new(dns.Msg)
+			req.SetQuestion(testQuery, dns.TypeA)
+			if tc.withOPT {
+				req.SetEdns0(1232, true)
+				req.IsEdns0().Option = append(req.IsEdns0().Option, &dns.EDNS0_LOCAL{
+					Code: dns.EDNS0LOCALSTART,
+					Data: []byte{6, 1},
+				})
+			}
+			original, err := req.Pack()
+			require.NoError(t, err)
+
+			c := NewClientWithUDPBufferSize(s.addr, UDP, tc.configured)
+			_, err = c.Request(context.Background(), &request.Request{W: &test.ResponseWriter{}, Req: req})
+			require.NoError(t, err)
+
+			wireReq := <-received
+			require.Equal(t, tc.configured, wireReq.IsEdns0().UDPSize())
+			if tc.withOPT {
+				require.True(t, wireReq.IsEdns0().Do())
+				require.Equal(t, req.IsEdns0().Option, wireReq.IsEdns0().Option)
+			}
+			after, err := req.Pack()
+			require.NoError(t, err)
+			require.Equal(t, original, after)
+		})
+	}
+}
+
+func TestClientDoesNotOverrideEDNSForTCP(t *testing.T) {
+	tests := []struct {
+		name    string
+		withOPT bool
+	}{
+		{name: "preserve existing OPT", withOPT: true},
+		{name: "do not add absent OPT"},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			received := make(chan *dns.Msg, 1)
+			s := newServer(TCP, func(w dns.ResponseWriter, req *dns.Msg) {
+				received <- req.Copy()
+				resp := new(dns.Msg)
+				resp.SetReply(req)
+				logErrIfNotNil(w.WriteMsg(resp))
+			})
+			defer s.close()
+
+			req := new(dns.Msg)
+			req.SetQuestion(testQuery, dns.TypeA)
+			if tc.withOPT {
+				req.SetEdns0(1232, true)
+				req.IsEdns0().Option = append(req.IsEdns0().Option, &dns.EDNS0_LOCAL{
+					Code: dns.EDNS0LOCALSTART,
+					Data: []byte{6, 1},
+				})
+			}
+			original, err := req.Pack()
+			require.NoError(t, err)
+
+			c := NewClientWithUDPBufferSize(s.addr, TCP, 4096)
+			_, err = c.Request(context.Background(), &request.Request{W: &test.ResponseWriter{}, Req: req})
+			require.NoError(t, err)
+			wireReq := <-received
+			require.Equal(t, req.Question, wireReq.Question)
+			if tc.withOPT {
+				require.Equal(t, uint16(1232), wireReq.IsEdns0().UDPSize())
+				require.True(t, wireReq.IsEdns0().Do())
+				require.Equal(t, req.IsEdns0().Option, wireReq.IsEdns0().Option)
+			} else {
+				require.Nil(t, wireReq.IsEdns0())
+			}
+			after, err := req.Pack()
+			require.NoError(t, err)
+			require.Equal(t, original, after)
+		})
+	}
 }
