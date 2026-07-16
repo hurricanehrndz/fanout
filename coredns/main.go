@@ -14,6 +14,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+// Package main builds CoreDNS with the fanout plugin.
 package main
 
 import (
@@ -28,6 +29,7 @@ import (
 	_ "github.com/networkservicemesh/fanout"
 )
 
+//nolint:gochecknoinits // CoreDNS custom builds register plugin directives during initialization.
 func init() {
 	dnsserver.Directives = append(dnsserver.Directives, "fanout")
 }
