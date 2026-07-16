@@ -30,8 +30,13 @@ const (
 	defaultTimeout       = 30 * time.Second
 	readTimeout          = 2 * time.Second
 	attemptDelay         = time.Millisecond * 100
-	minUDPBufferSize     = 1232      // Minimum UDP buffer size for DNS (RFC 6891)
-	TCPTLS               = "tcp-tls" // TCPTLS Net type for a Client.
-	TCP                  = "tcp"     // TCP Net type for a Client.
-	UDP                  = "udp"     // UDP Net type for a Client.
+	minUDPBufferSize     = 1232 // Minimum UDP buffer size for DNS (RFC 6891)
+	pluginName           = "fanout"
+
+	// TCPTLS is the DNS-over-TLS network type for a Client.
+	TCPTLS = "tcp-tls"
+	// TCP is the TCP network type for a Client.
+	TCP = "tcp"
+	// UDP is the UDP network type for a Client.
+	UDP = "udp"
 )

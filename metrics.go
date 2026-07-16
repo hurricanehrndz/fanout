@@ -22,25 +22,30 @@ import (
 	"github.com/prometheus/client_golang/prometheus/promauto"
 )
 
+const (
+	metricLabelTo    = "to"
+	requestCountHelp = "Counter of requests made per upstream."
+)
+
 // Variables declared for monitoring.
 var (
 	RequestCount = promauto.NewCounterVec(prometheus.CounterOpts{
 		Namespace: plugin.Namespace,
-		Subsystem: "fanout",
+		Subsystem: pluginName,
 		Name:      "request_count_total",
-		Help:      "Counter of requests made per upstream.",
-	}, []string{"to"})
+		Help:      requestCountHelp,
+	}, []string{metricLabelTo})
 	RcodeCount = promauto.NewCounterVec(prometheus.CounterOpts{
 		Namespace: plugin.Namespace,
-		Subsystem: "fanout",
+		Subsystem: pluginName,
 		Name:      "response_rcode_count_total",
-		Help:      "Counter of requests made per upstream.",
-	}, []string{"rcode", "to"})
+		Help:      requestCountHelp,
+	}, []string{"rcode", metricLabelTo})
 	RequestDuration = promauto.NewHistogramVec(prometheus.HistogramOpts{
 		Namespace: plugin.Namespace,
-		Subsystem: "fanout",
+		Subsystem: pluginName,
 		Name:      "request_duration_seconds",
 		Buckets:   plugin.TimeBuckets,
 		Help:      "Histogram of the time each request took.",
-	}, []string{"to"})
+	}, []string{metricLabelTo})
 )

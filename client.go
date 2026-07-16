@@ -55,6 +55,7 @@ func NewClient(addr, net string) Client {
 	return a
 }
 
+// NewClientWithUDPBufferSize creates a client with a specific UDP buffer size.
 func NewClientWithUDPBufferSize(addr, net string, udpBufferSize uint16) Client {
 	a := &client{
 		addr:          addr,

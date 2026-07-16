@@ -1,90 +1,11 @@
 ---
+version: "2"
 run:
-  # concurrency: 6
-  timeout: 1m
   issues-exit-code: 1
   tests: true
-linters-settings:
-  errcheck:
-    check-type-assertions: false
-    check-blank: false
-  govet:
-    enable:
-      shadow
-    settings:
-      printf:
-        funcs:
-          - (github.com/sirupsen/logrus.FieldLogger).Infof
-          - (github.com/sirupsen/logrus.FieldLogger).Warnf
-          - (github.com/sirupsen/logrus.FieldLogger).Errorf
-          - (github.com/sirupsen/logrus.FieldLogger).Fatalf
-  goimports:
-    local-prefixes: github.com/networkservicemesh/sdk
-  gocyclo:
-    min-complexity: 15
-  maligned:
-    suggest-new: true
-  dupl:
-    threshold: 150
-  goconst:
-    min-len: 2
-    min-occurrences: 2
-  depguard:
-    rules:
-      default:
-        deny:
-          - pkg: "errors"
-            desc: "Please use \"github.com/pkg/errors\" instead of \"errors\" in go imports"
-  misspell:
-    locale: US
-  unparam:
-    check-exported: false
-  nakedret:
-    max-func-lines: 30
-  prealloc:
-    simple: true
-    range-loops: true
-    for-loops: false
-  gocritic:
-    enabled-checks:
-      - appendCombine
-      - boolExprSimplify
-      - builtinShadow
-      - commentedOutCode
-      - commentedOutImport
-      - docStub
-      - dupImport
-      - emptyFallthrough
-      - emptyStringTest
-      - equalFold
-      - evalOrder
-      - hexLiteral
-      - hugeParam
-      - importShadow
-      - indexAlloc
-      - initClause
-      - methodExprCall
-      - nestingReduce
-      - nilValReturn
-      - octalLiteral
-      - paramTypeCombine
-      - ptrToRefParam
-      - rangeExprCopy
-      - rangeValCopy
-      - regexpPattern
-      - sloppyReassign
-      - stringXbytes
-      - typeAssertChain
-      - typeUnparen
-      - unlabelStmt
-      - unnamedResult
-      - unnecessaryBlock
-      - weakCond
-      - yodaStyleExpr
 linters:
-  disable-all: true
+  default: none
   enable:
-    # - rowserrcheck
     - bodyclose
     - depguard
     - dogsled
@@ -95,44 +16,146 @@ linters:
     - goconst
     - gocritic
     - gocyclo
-    - gofmt
-    - goimports
-    - revive
     - gosec
-    - gosimple
     - govet
     - ineffassign
-    # - lll
     - misspell
     - nakedret
+    - revive
     - staticcheck
-    - stylecheck
-    - typecheck
     - unconvert
     - unparam
     - unused
     - whitespace
+  settings:
+    depguard:
+      rules:
+        default:
+          deny:
+            - pkg: errors
+              desc: Please use "github.com/pkg/errors" instead of "errors" in go imports
+    dupl:
+      threshold: 150
+    errcheck:
+      check-type-assertions: false
+      check-blank: false
+    goconst:
+      min-len: 2
+      min-occurrences: 2
+    gocritic:
+      enabled-checks:
+        - appendCombine
+        - boolExprSimplify
+        - builtinShadow
+        - commentedOutCode
+        - commentedOutImport
+        - docStub
+        - dupImport
+        - emptyFallthrough
+        - emptyStringTest
+        - equalFold
+        - evalOrder
+        - hexLiteral
+        - hugeParam
+        - importShadow
+        - indexAlloc
+        - initClause
+        - methodExprCall
+        - nestingReduce
+        - nilValReturn
+        - octalLiteral
+        - paramTypeCombine
+        - ptrToRefParam
+        - rangeExprCopy
+        - rangeValCopy
+        - regexpPattern
+        - sloppyReassign
+        - stringXbytes
+        - typeAssertChain
+        - typeUnparen
+        - unlabelStmt
+        - unnamedResult
+        - unnecessaryBlock
+        - weakCond
+        - yodaStyleExpr
+    gocyclo:
+      min-complexity: 15
+    govet:
+      enable:
+        - shadow
+      settings:
+        printf:
+          funcs:
+            - (github.com/sirupsen/logrus.FieldLogger).Infof
+            - (github.com/sirupsen/logrus.FieldLogger).Warnf
+            - (github.com/sirupsen/logrus.FieldLogger).Errorf
+            - (github.com/sirupsen/logrus.FieldLogger).Fatalf
+    misspell:
+      locale: US
+    nakedret:
+      max-func-lines: 30
+    prealloc:
+      simple: true
+      range-loops: true
+      for-loops: false
+    unparam:
+      check-exported: false
+  exclusions:
+    generated: lax
+    rules:
+      # Test teardown errors and repeated table literals are intentionally ignored.
+      - linters:
+          - errcheck
+          - goconst
+        path: _test\.go
+      # Tests may be long.
+      - linters:
+          - funlen
+        path: setup_test.go
+      # CoreDNS plugins require an init function.
+      - linters:
+          - gochecknoinits
+        path: setup.go
+      # parseValue intentionally has one case per plugin directive.
+      - linters:
+          - funlen
+          - gocyclo
+        path: setup.go
+      # The test binds to all interfaces to allocate a port.
+      - linters:
+          - gosec
+        path: fanout_test.go
+      # Tests may be complex.
+      - linters:
+          - gocyclo
+        path: setup_test.go
+      # Keep the existing request flow intact during the tooling migration.
+      - linters:
+          - funlen
+          - gocyclo
+        path: client.go
+      # gocritic conflicts with other enabled linters here.
+      - linters:
+          - gocritic
+        path: client.go
+    paths:
+      - third_party$
+      - builtin$
+      - examples$
 issues:
-  exclude-use-default: false
   max-issues-per-linter: 0
   max-same-issues: 0
-  exclude-rules:
-    - path: "setup_test.go"
-      linters:
-        - funlen
-    # CoreDNS plugin should have init func.
-    - path: "setup.go"
-      linters:
-        - gochecknoinits
-    # Binds to all network interfaces is used in test to get port.
-    - path: "fanout_test.go"
-      linters:
-        - gosec
-    # Tests may be long.
-    - path: "setup_test.go"
-      linters:
-        - gocyclo
-    # gocritic conflicts with other linters
-    - path: "client.go"
-      linters:
-        - gocritic
+formatters:
+  enable:
+    - gofmt
+    - goimports
+  settings:
+    goimports:
+      local-prefixes:
+        - github.com/networkservicemesh/sdk
+  exclusions:
+    generated: lax
+    paths:
+      - third_party$
+      - builtin$
+      - examples$

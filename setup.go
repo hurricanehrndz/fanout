@@ -19,7 +19,6 @@
 package fanout
 
 import (
-	"fmt"
 	"math"
 	"math/rand"
 	"os"
@@ -41,7 +40,7 @@ import (
 )
 
 func init() {
-	caddy.RegisterPlugin("fanout", caddy.Plugin{
+	caddy.RegisterPlugin(pluginName, caddy.Plugin{
 		ServerType: "dns",
 		Action:     setup,
 	})
@@ -50,14 +49,14 @@ func init() {
 func setup(c *caddy.Controller) error {
 	fs, err := parseFanout(c)
 	if err != nil {
-		return plugin.Error("fanout", err)
+		return plugin.Error(pluginName, err)
 	}
 
 	for i := range fs {
 		f := fs[i]
 		l := len(f.clients)
 		if l > maxIPCount {
-			return plugin.Error("fanout", errors.Errorf("more than %d TOs configured: %d", maxIPCount, l))
+			return plugin.Error(pluginName, errors.Errorf("more than %d TOs configured: %d", maxIPCount, l))
 		}
 
 		if i == len(fs)-1 {
@@ -87,7 +86,6 @@ func setup(c *caddy.Controller) error {
 		c.OnShutdown(func() error {
 			return f.OnShutdown()
 		})
-
 	}
 
 	return nil
@@ -259,7 +257,7 @@ func parseNext(f *Fanout, c *caddyfile.Dispenser) error {
 		var ok bool
 
 		if rc, ok = dns.StringToRcode[strings.ToUpper(rcode)]; !ok {
-			return fmt.Errorf("%s is not a valid rcode", rcode)
+			return errors.Errorf("%s is not a valid rcode", rcode)
 		}
 
 		f.nextAlternateRcodes = append(f.nextAlternateRcodes, rc)
