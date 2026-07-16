@@ -51,6 +51,7 @@ type Fanout struct {
 	WorkerCount           int
 	serverCount           int
 	udpBufferSize         uint16
+	udpBufferSizeOverride uint16
 	loadFactor            []int
 	policyType            string
 	ServerSelectionPolicy policy

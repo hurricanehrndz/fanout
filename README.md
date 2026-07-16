@@ -1,12 +1,12 @@
 # fanout
-![ci](https://github.com/networkservicemesh/fanout/workflows/ci/badge.svg) ![push](https://github.com/networkservicemesh/fanout/workflows/push/badge.svg?branch=master)
+![ci](https://github.com/networkservicemesh/fanout/workflows/ci/badge.svg)
 ## Name
 
 *fanout* - parallel proxying DNS messages to upstream resolvers.
 
 ## Description
 
-Each incoming DNS query that hits the CoreDNS fanout plugin will be replicated in parallel to each listed IP (i.e. the DNS servers). The first non-negative response from any of the queried DNS Servers will be forwarded as a response to the application's DNS request.
+Each incoming DNS query that hits the CoreDNS fanout plugin will be replicated in parallel to each listed IP (i.e. the DNS servers). Without `race`, the first valid answer-bearing NOERROR response is forwarded; NODATA and negative responses are retained as fallbacks while waiting.
 
 ## Syntax
 
@@ -18,9 +18,9 @@ Each incoming DNS query that hits the CoreDNS fanout plugin will be replicated i
     The server certificate is verified with the system CAs
   * `tls` **CERT** **KEY**  **CA** - client authentication is used with the specified cert/key pair.
     The server certificate is verified using the specified CA file
-* `tls_servername` **NAME** allows you to set a server name in the TLS configuration; for instance 9.9.9.9
+* `tls-server` **NAME** allows you to set a server name in the TLS configuration; for instance 9.9.9.9
   needs this to be set to `dns.quad9.net`. Multiple upstreams are still allowed in this scenario,
-  but they have to use the same `tls_servername`. E.g. mixing 9.9.9.9 (QuadDNS) with 1.1.1.1
+  but they have to use the same `tls-server`. E.g. mixing 9.9.9.9 (QuadDNS) with 1.1.1.1
   (Cloudflare) will not work.
 
 * `worker-count` is the number of parallel queries per request. By default equals to count of IP list. Use this only for reducing parallel queries per request.
@@ -34,7 +34,7 @@ Each incoming DNS query that hits the CoreDNS fanout plugin will be replicated i
 * `except-file` is the path to file with line-separated list of domains to exclude from proxying.
 * `attempt-count` is the number of attempts to connect to upstream servers that are needed before considering an upstream to be down. If 0, the upstream will never be marked as down and request will be finished by `timeout`. Default is `3`.
 * `timeout` is the timeout of request. After this period, attempts to receive a response from the upstream servers will be stopped. Default is `30s`.
-* `udp-buffer-size` is the UDP buffer size advertised in EDNS0 requests to upstream servers. This overrides the buffer size from client requests. Minimum value is `1232` bytes (RFC 6891). This setting only affects UDP queries; TCP queries are unaffected. Default is `1232`. Should only be used with local resolvers.
+* `udp-buffer-size` overrides the UDP buffer size advertised in EDNS0 requests to upstream servers. Minimum value is `1232` bytes (RFC 6891). When omitted, existing EDNS0 is preserved and requests without EDNS0 advertise `1232`. This setting only affects UDP queries; TCP queries are unaffected. Should only be used with local resolvers.
 * `race` gives priority to the first result, whether it is negative or not, as long as it is a standard DNS result.
 ## Metrics
 

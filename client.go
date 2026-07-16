@@ -38,10 +38,11 @@ type Client interface {
 }
 
 type client struct {
-	transport     Transport
-	addr          string
-	net           string
-	udpBufferSize uint16
+	transport             Transport
+	addr                  string
+	net                   string
+	udpBufferSize         uint16
+	udpBufferSizeOverride uint16
 }
 
 // NewClient creates new client with specific addr and network
@@ -103,9 +104,13 @@ func (c *client) Request(ctx context.Context, r *request.Request) (*dns.Msg, err
 		req = r.Req.Copy()
 		opt := req.IsEdns0()
 		if opt == nil {
-			req.SetEdns0(c.udpBufferSize, false)
-		} else {
-			opt.SetUDPSize(c.udpBufferSize)
+			size := c.udpBufferSize
+			if c.udpBufferSizeOverride != 0 {
+				size = c.udpBufferSizeOverride
+			}
+			req.SetEdns0(size, false)
+		} else if c.udpBufferSizeOverride != 0 {
+			opt.SetUDPSize(c.udpBufferSizeOverride)
 		}
 	}
 

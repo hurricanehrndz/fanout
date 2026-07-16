@@ -159,7 +159,9 @@ func initClients(f *Fanout, hosts []string) {
 	transports := make([]string, len(hosts))
 	for i, host := range hosts {
 		trans, h := parse.Transport(host)
-		f.clients = append(f.clients, NewClientWithUDPBufferSize(h, f.net, f.udpBufferSize))
+		c := NewClientWithUDPBufferSize(h, f.net, f.udpBufferSize)
+		c.(*client).udpBufferSizeOverride = f.udpBufferSizeOverride
+		f.clients = append(f.clients, c)
 		transports[i] = trans
 	}
 
@@ -238,6 +240,7 @@ func parseValue(v string, f *Fanout, c *caddyfile.Dispenser) error {
 		}
 		// parsePositiveInt and the upper-bound check make this conversion safe.
 		f.udpBufferSize = max(uint16(minUDPBufferSize), uint16(num)) //nolint:gosec
+		f.udpBufferSizeOverride = f.udpBufferSize
 		return nil
 	case "next":
 		return parseNext(f, c)

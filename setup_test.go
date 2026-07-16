@@ -32,19 +32,20 @@ import (
 
 func TestSetup(t *testing.T) {
 	tests := []struct {
-		input                 string
-		expectedFrom          string
-		expectedTo            []string
-		expectedIgnored       []string
-		expectedWorkers       int
-		expectedAttempts      int
-		expectedTimeout       time.Duration
-		expectedNetwork       string
-		expectedServerCount   int
-		expectedLoadFactor    []int
-		expectedPolicy        string
-		expectedUDPBufferSize uint16
-		expectedErr           string
+		input                         string
+		expectedFrom                  string
+		expectedTo                    []string
+		expectedIgnored               []string
+		expectedWorkers               int
+		expectedAttempts              int
+		expectedTimeout               time.Duration
+		expectedNetwork               string
+		expectedServerCount           int
+		expectedLoadFactor            []int
+		expectedPolicy                string
+		expectedUDPBufferSize         uint16
+		expectedUDPBufferSizeOverride uint16
+		expectedErr                   string
 	}{
 		// positive
 		{input: "fanout . 127.0.0.1 {\npolicy weighted-random \nweighted-random-server-count 5 weighted-random-load-factor 100\n}", expectedFrom: ".", expectedAttempts: 3, expectedWorkers: 1, expectedTimeout: defaultTimeout, expectedNetwork: "udp", expectedServerCount: 1, expectedLoadFactor: []int{100}, expectedPolicy: policyWeightedRandom},
@@ -56,7 +57,7 @@ func TestSetup(t *testing.T) {
 		{input: "fanout . 127.0.0.1 127.0.0.2 127.0.0.3 127.0.0.4 {\nattempt-count 2\n}", expectedTimeout: defaultTimeout, expectedFrom: ".", expectedAttempts: 2, expectedWorkers: 4, expectedNetwork: "udp", expectedServerCount: 4, expectedLoadFactor: nil, expectedPolicy: ""},
 		{input: "fanout . 127.0.0.1 127.0.0.2 127.0.0.3 {\npolicy weighted-random \n}", expectedFrom: ".", expectedAttempts: 3, expectedWorkers: 3, expectedTimeout: defaultTimeout, expectedNetwork: "udp", expectedServerCount: 3, expectedLoadFactor: []int{100, 100, 100}, expectedPolicy: policyWeightedRandom},
 		{input: "fanout . 127.0.0.1 127.0.0.2 127.0.0.3 {\npolicy sequential\nworker-count 3\n}", expectedFrom: ".", expectedAttempts: 3, expectedWorkers: 3, expectedTimeout: defaultTimeout, expectedNetwork: "udp", expectedServerCount: 3, expectedLoadFactor: nil, expectedPolicy: policySequential},
-		{input: "fanout . 127.0.0.1 {\nudp-buffer-size 65535\n}", expectedFrom: ".", expectedAttempts: 3, expectedWorkers: 1, expectedTimeout: defaultTimeout, expectedNetwork: "udp", expectedServerCount: 1, expectedPolicy: "", expectedUDPBufferSize: 65535},
+		{input: "fanout . 127.0.0.1 {\nudp-buffer-size 65535\n}", expectedFrom: ".", expectedAttempts: 3, expectedWorkers: 1, expectedTimeout: defaultTimeout, expectedNetwork: "udp", expectedServerCount: 1, expectedPolicy: "", expectedUDPBufferSize: 65535, expectedUDPBufferSizeOverride: 65535},
 
 		// negative
 		{input: "fanout . aaa", expectedErr: "not an IP address or file"},
@@ -128,12 +129,21 @@ func TestSetup(t *testing.T) {
 		if f.policyType != test.expectedPolicy {
 			t.Fatalf("Test %d: expected: %s, got: %s", i, test.expectedPolicy, f.policyType)
 		}
+		if f.udpBufferSizeOverride != test.expectedUDPBufferSizeOverride {
+			t.Fatalf("Test %d: expected UDP buffer size override: %d, got: %d", i, test.expectedUDPBufferSizeOverride, f.udpBufferSizeOverride)
+		}
+		client, ok := f.clients[0].(*client)
+		if !ok {
+			t.Fatalf("Test %d: expected *client, got %T", i, f.clients[0])
+		}
+		if client.udpBufferSizeOverride != test.expectedUDPBufferSizeOverride {
+			t.Fatalf("Test %d: expected client UDP buffer size override: %d, got: %d", i, test.expectedUDPBufferSizeOverride, client.udpBufferSizeOverride)
+		}
 		if test.expectedUDPBufferSize != 0 {
 			if f.udpBufferSize != test.expectedUDPBufferSize {
 				t.Fatalf("Test %d: expected UDP buffer size: %d, got: %d", i, test.expectedUDPBufferSize, f.udpBufferSize)
 			}
-			client, ok := f.clients[0].(*client)
-			if !ok || client.udpBufferSize != test.expectedUDPBufferSize {
+			if client.udpBufferSize != test.expectedUDPBufferSize {
 				t.Fatalf("Test %d: client did not receive UDP buffer size %d", i, test.expectedUDPBufferSize)
 			}
 		}

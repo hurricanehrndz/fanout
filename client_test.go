@@ -60,11 +60,62 @@ func TestClientAdvertisesConfiguredUDPBufferSizeWithoutMutatingRequest(t *testin
 			require.NoError(t, err)
 
 			c := NewClientWithUDPBufferSize(s.addr, UDP, tc.configured)
+			c.(*client).udpBufferSizeOverride = tc.configured
 			_, err = c.Request(context.Background(), &request.Request{W: &test.ResponseWriter{}, Req: req})
 			require.NoError(t, err)
 
 			wireReq := <-received
 			require.Equal(t, tc.configured, wireReq.IsEdns0().UDPSize())
+			if tc.withOPT {
+				require.True(t, wireReq.IsEdns0().Do())
+				require.Equal(t, req.IsEdns0().Option, wireReq.IsEdns0().Option)
+			}
+			after, err := req.Pack()
+			require.NoError(t, err)
+			require.Equal(t, original, after)
+		})
+	}
+}
+
+func TestClientPreservesIncomingEDNSWithoutUDPBufferOverride(t *testing.T) {
+	tests := []struct {
+		name     string
+		withOPT  bool
+		expected uint16
+	}{
+		{name: "preserve existing OPT", withOPT: true, expected: 65535},
+		{name: "add absent OPT with client minimum", expected: 4096},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			received := make(chan *dns.Msg, 1)
+			s := newServer(UDP, func(w dns.ResponseWriter, req *dns.Msg) {
+				received <- req.Copy()
+				resp := new(dns.Msg)
+				resp.SetReply(req)
+				logErrIfNotNil(w.WriteMsg(resp))
+			})
+			defer s.close()
+
+			req := new(dns.Msg)
+			req.SetQuestion(testQuery, dns.TypeA)
+			if tc.withOPT {
+				req.SetEdns0(tc.expected, true)
+				req.IsEdns0().Option = append(req.IsEdns0().Option, &dns.EDNS0_LOCAL{
+					Code: dns.EDNS0LOCALSTART,
+					Data: []byte{6, 1},
+				})
+			}
+			original, err := req.Pack()
+			require.NoError(t, err)
+
+			c := NewClientWithUDPBufferSize(s.addr, UDP, 4096)
+			_, err = c.Request(context.Background(), &request.Request{W: &test.ResponseWriter{}, Req: req})
+			require.NoError(t, err)
+
+			wireReq := <-received
+			require.Equal(t, tc.expected, wireReq.IsEdns0().UDPSize())
 			if tc.withOPT {
 				require.True(t, wireReq.IsEdns0().Do())
 				require.Equal(t, req.IsEdns0().Option, wireReq.IsEdns0().Option)
@@ -109,6 +160,7 @@ func TestClientDoesNotOverrideEDNSForTCP(t *testing.T) {
 			require.NoError(t, err)
 
 			c := NewClientWithUDPBufferSize(s.addr, TCP, 4096)
+			c.(*client).udpBufferSizeOverride = 65535
 			_, err = c.Request(context.Background(), &request.Request{W: &test.ResponseWriter{}, Req: req})
 			require.NoError(t, err)
 			wireReq := <-received
