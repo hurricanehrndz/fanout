@@ -7,7 +7,7 @@ You can build Coredns image via source code of Corends for this case you need to
 $ cd $GOPATH
 $ git clone https://github.com/coredns/coredns
 $ cd coredns
-$ echo fanout:github.com/networkservicemesh/fanout >> plugin.cfg
+$ echo fanout:github.com/hurricanehrndz/fanout/v2 >> plugin.cfg
 $ make
 ```
 

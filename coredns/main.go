@@ -26,7 +26,7 @@ import (
 	_ "github.com/coredns/coredns/plugin/log"
 	_ "github.com/coredns/coredns/plugin/reload"
 
-	_ "github.com/networkservicemesh/fanout"
+	_ "github.com/hurricanehrndz/fanout/v2"
 )
 
 //nolint:gochecknoinits // CoreDNS custom builds register plugin directives during initialization.
