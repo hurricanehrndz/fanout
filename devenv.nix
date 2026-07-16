@@ -15,6 +15,40 @@
     yamllint
   ];
 
+  treefmt = {
+    enable = true;
+    config = {
+      programs = {
+        goimports.enable = true;
+        nixfmt.enable = true;
+        yamlfmt = {
+          enable = true;
+          settings.formatter = {
+            include_document_start = true;
+            retain_line_breaks = true;
+          };
+        };
+      };
+      settings.formatter.goimports.options = [
+        "-local"
+        "github.com/networkservicemesh/sdk"
+      ];
+    };
+  };
+
+  git-hooks = {
+    package = pkgs.prek;
+    hooks = {
+      treefmt.enable = true;
+      golangci-lint = {
+        enable = true;
+        package = pkgs.golangci-lint;
+        entry = "${pkgs.golangci-lint}/bin/golangci-lint run";
+        pass_filenames = false;
+      };
+    };
+  };
+
   enterShell = ''
     export PATH="$GOPATH/bin:$PATH"
 
