@@ -62,25 +62,15 @@ jobs:
           git diff --exit-code
       - name: Run golangci-lint
         run: docker run --rm -v $(pwd):/app -w /app ${GOLANGCI_LINT_CONTAINER} golangci-lint run
-  buildDockerImage:
-    name: build docker image
+  e2e:
+    name: Docker DNS E2E
     runs-on: ubuntu-latest
-    env:
-      TAG: test
-      ORG: networkservicemesh
     steps:
       - uses: actions/checkout@v7
       - uses: actions/setup-go@v6
         with:
           go-version: 1.26.5
-      - name: build coredns binary
-        run: |
-          go -C coredns build -o coredns .
-      - name: build docker image
-        run: |
-          docker build coredns/. -t "${ORG}/coredns:${TAG}"
-      - name: remove docker image
-        run: docker image rm "${ORG}/coredns:${TAG}"
+      - run: .github/e2e.sh
   excludeFmtErrorf:
     name: exclude fmt.Errorf
     runs-on: ubuntu-latest
