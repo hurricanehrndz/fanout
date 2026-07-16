@@ -1,4 +1,4 @@
-module github.com/networkservicemesh/fanout
+module github.com/hurricanehrndz/fanout/v2
 
 go 1.26.5
 

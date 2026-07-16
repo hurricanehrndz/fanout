@@ -1,5 +1,5 @@
 # fanout
-[![CI](https://github.com/networkservicemesh/fanout/actions/workflows/ci.yaml/badge.svg?event=pull_request)](https://github.com/networkservicemesh/fanout/actions/workflows/ci.yaml)
+[![CI](https://github.com/hurricanehrndz/fanout/actions/workflows/ci.yaml/badge.svg?event=pull_request)](https://github.com/hurricanehrndz/fanout/actions/workflows/ci.yaml)
 ## Name
 
 *fanout* - parallel proxying DNS messages to upstream resolvers.

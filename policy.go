@@ -20,7 +20,7 @@ import (
 	"math/rand"
 	"sync"
 
-	"github.com/networkservicemesh/fanout/internal/selector"
+	"github.com/hurricanehrndz/fanout/v2/internal/selector"
 )
 
 type policy interface {
