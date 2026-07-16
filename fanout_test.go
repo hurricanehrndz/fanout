@@ -33,6 +33,7 @@ import (
 	"github.com/coredns/caddy"
 	"github.com/coredns/coredns/plugin/pkg/dnstest"
 	"github.com/coredns/coredns/plugin/test"
+	"github.com/coredns/coredns/request"
 	"github.com/miekg/dns"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
@@ -412,6 +413,172 @@ func (t *fanoutTestSuite) TestServerCount() {
 	mutex.Lock()
 	t.Equal(expected, answerCount)
 	mutex.Unlock()
+}
+
+func TestWeightedPolicyConcurrentSelectorsAreRaceFree(t *testing.T) {
+	const (
+		clientCount   = 32
+		selectorCount = 64
+	)
+	clients := make([]Client, 0, clientCount)
+	weights := make([]int, 0, clientCount)
+	for i := 0; i < clientCount; i++ {
+		clients = append(clients, NewClient(fmt.Sprintf("192.0.2.%d:53", i+1), UDP))
+		weights = append(weights, i+1)
+	}
+	policy := &WeightedPolicy{
+		loadFactor: weights,
+		//nolint:gosec // deterministic seed verifies injected RNG behavior
+		r: rand.New(rand.NewSource(1)),
+	}
+
+	start := make(chan struct{})
+	results := make(chan bool, selectorCount)
+	var wg sync.WaitGroup
+	wg.Add(selectorCount)
+	for i := 0; i < selectorCount; i++ {
+		go func() {
+			defer wg.Done()
+			<-start
+			selector := policy.selector(clients)
+			seen := make(map[string]struct{}, clientCount)
+			for range clients {
+				client := selector.Pick()
+				if client == nil {
+					results <- false
+					return
+				}
+				seen[client.Endpoint()] = struct{}{}
+			}
+			results <- len(seen) == clientCount && selector.Pick() == nil
+		}()
+	}
+	close(start)
+	wg.Wait()
+	close(results)
+
+	for result := range results {
+		require.True(t, result, "each selector must pick every client exactly once")
+	}
+}
+
+func TestFanoutPrefersPositiveAnswerOverNODATA(t *testing.T) {
+	req := new(dns.Msg)
+	req.SetQuestion(testQuery, dns.TypeA)
+	nodata := new(dns.Msg)
+	nodata.SetReply(req)
+	positive := new(dns.Msg)
+	positive.SetReply(req)
+	positive.Answer = []dns.RR{makeRecordA("example1. 3600 IN A 10.0.0.1")}
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	responses := make(chan *response, 2)
+	results := make(chan *response, 1)
+	go func() {
+		results <- New().getFanoutResult(ctx, &request.Request{Req: req}, responses)
+	}()
+	responses <- &response{response: nodata}
+
+	select {
+	case result := <-results:
+		t.Fatalf("returned NODATA before a positive response: %v", result)
+	case <-time.After(50 * time.Millisecond):
+	}
+	responses <- &response{response: positive}
+
+	select {
+	case result := <-results:
+		require.Same(t, positive, result.response)
+	case <-time.After(time.Second):
+		t.Fatal("timed out waiting for positive response")
+	}
+}
+
+func TestFanoutIgnoresMismatchedResponse(t *testing.T) {
+	req := new(dns.Msg)
+	req.SetQuestion(testQuery, dns.TypeA)
+	wrongReq := new(dns.Msg)
+	wrongReq.SetQuestion("attacker.example.", dns.TypeA)
+	mismatched := new(dns.Msg)
+	mismatched.SetReply(wrongReq)
+	valid := new(dns.Msg)
+	valid.SetReply(req)
+	valid.Answer = []dns.RR{makeRecordA("example1. 3600 IN A 10.0.0.1")}
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	responses := make(chan *response, 2)
+	results := make(chan *response, 1)
+	go func() {
+		results <- New().getFanoutResult(ctx, &request.Request{Req: req}, responses)
+	}()
+	responses <- &response{response: mismatched}
+
+	select {
+	case result := <-results:
+		t.Fatalf("returned mismatched response: %v", result)
+	case <-time.After(50 * time.Millisecond):
+	}
+	responses <- &response{response: valid}
+
+	select {
+	case result := <-results:
+		require.Same(t, valid, result.response)
+	case <-time.After(time.Second):
+		t.Fatal("timed out waiting for valid response")
+	}
+}
+
+func TestPositiveResponseIncludesCNAME(t *testing.T) {
+	tests := map[string]struct {
+		msg      *dns.Msg
+		positive bool
+	}{
+		"A answer": {
+			msg:      &dns.Msg{MsgHdr: dns.MsgHdr{Rcode: dns.RcodeSuccess}, Answer: []dns.RR{makeRecordA("example1. 3600 IN A 10.0.0.1")}},
+			positive: true,
+		},
+		"CNAME answer": {
+			msg:      &dns.Msg{MsgHdr: dns.MsgHdr{Rcode: dns.RcodeSuccess}, Answer: []dns.RR{test.CNAME("example1. 3600 IN CNAME target.example.")}},
+			positive: true,
+		},
+		"NODATA": {
+			msg: &dns.Msg{MsgHdr: dns.MsgHdr{Rcode: dns.RcodeSuccess}},
+		},
+		"non-NOERROR answer": {
+			msg: &dns.Msg{MsgHdr: dns.MsgHdr{Rcode: dns.RcodeNameError}, Answer: []dns.RR{makeRecordA("example1. 3600 IN A 10.0.0.1")}},
+		},
+	}
+
+	for name, tc := range tests {
+		t.Run(name, func(t *testing.T) {
+			require.Equal(t, tc.positive, isPositiveResponse(tc.msg))
+		})
+	}
+}
+
+func TestFanoutRaceReturnsFirstValidNODATA(t *testing.T) {
+	req := new(dns.Msg)
+	req.SetQuestion(testQuery, dns.TypeA)
+	nodata := new(dns.Msg)
+	nodata.SetReply(req)
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	responses := make(chan *response, 1)
+	results := make(chan *response, 1)
+	go func() {
+		results <- (&Fanout{Race: true}).getFanoutResult(ctx, &request.Request{Req: req}, responses)
+	}()
+	responses <- &response{response: nodata}
+
+	select {
+	case result := <-results:
+		require.Same(t, nodata, result.response)
+	case <-time.After(time.Second):
+		t.Fatal("race mode waited for another response after valid NODATA")
+	}
 }
 
 func TestFanoutUDPSuite(t *testing.T) {

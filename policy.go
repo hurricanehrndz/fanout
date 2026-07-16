@@ -18,6 +18,7 @@ package fanout
 
 import (
 	"math/rand"
+	"sync"
 
 	"github.com/networkservicemesh/fanout/internal/selector"
 )
@@ -43,9 +44,16 @@ func (p *SequentialPolicy) selector(clients []Client) clientSelector {
 type WeightedPolicy struct {
 	loadFactor []int
 	r          *rand.Rand
+	mutex      sync.Mutex
 }
 
 // creates new weighted random selector of provided clients based on loadFactor
 func (p *WeightedPolicy) selector(clients []Client) clientSelector {
-	return selector.NewWeightedRandSelector(clients, p.loadFactor, p.r)
+	p.mutex.Lock()
+	seed := p.r.Int63()
+	p.mutex.Unlock()
+
+	// Each request owns its RNG; only deterministic seed generation is shared.
+	//nolint:gosec // weighted selection does not need cryptographic randomness
+	return selector.NewWeightedRandSelector(clients, p.loadFactor, rand.New(rand.NewSource(seed)))
 }

@@ -94,7 +94,7 @@ func (f *Fanout) ServeDNS(ctx context.Context, w dns.ResponseWriter, m *dns.Msg)
 	timeoutContext, cancel := context.WithTimeout(ctx, f.Timeout)
 	defer cancel()
 
-	result := f.getFanoutResult(timeoutContext, f.runWorkers(timeoutContext, &req))
+	result := f.getFanoutResult(timeoutContext, &req, f.runWorkers(timeoutContext, &req))
 	if result == nil || result.err != nil {
 		rcode := dns.RcodeServerFailure
 		// Check if we should delegate to the next plugin based on RcodeServerFailure
@@ -175,7 +175,7 @@ func (f *Fanout) runWorkers(ctx context.Context, req *request.Request) chan *res
 	return responseCh
 }
 
-func (f *Fanout) getFanoutResult(ctx context.Context, responseCh <-chan *response) *response {
+func (f *Fanout) getFanoutResult(ctx context.Context, req *request.Request, responseCh <-chan *response) *response {
 	var result *response
 	for {
 		select {
@@ -185,19 +185,21 @@ func (f *Fanout) getFanoutResult(ctx context.Context, responseCh <-chan *respons
 			if !ok {
 				return result
 			}
+			if r.err != nil {
+				if isBetter(result, r) {
+					result = r
+				}
+				continue
+			}
+			if r.response == nil || !req.Match(r.response) {
+				continue
+			}
 			if isBetter(result, r) {
 				result = r
 			}
-			if r.err != nil {
-				break
-			}
-			if f.Race {
+			if f.Race || isPositiveResponse(r.response) {
 				return r
 			}
-			if r.response.Rcode != dns.RcodeSuccess {
-				break
-			}
-			return r
 		}
 	}
 }

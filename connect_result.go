@@ -29,6 +29,10 @@ type response struct {
 	err      error
 }
 
+func isPositiveResponse(msg *dns.Msg) bool {
+	return msg.Rcode == dns.RcodeSuccess && len(msg.Answer) > 0
+}
+
 func isBetter(left, right *response) bool {
 	if right == nil {
 		return false
